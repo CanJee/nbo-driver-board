@@ -1,0 +1,93 @@
+@import "tailwindcss";
+
+:root {
+  --shift-morning: #3B82F6;
+  --shift-afternoon: #10B981;
+  --shift-evening: #8B5CF6;
+  --shift-nightowl: #1E293B;
+
+  --bg-dark: #0F172A;
+  --bg-lane: #1E293B;
+  --bg-header: #1E293B;
+  --bg-card: #334155;
+  --text-primary: #F1F5F9;
+  --text-secondary: #94A3B8;
+  --border-assigned: #475569;
+  --border-unassigned: #F59E0B;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  background-color: var(--bg-dark);
+  color: var(--text-primary);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  height: 100vh;
+  width: 100vw;
+}
+
+/* Scrollable lanes */
+.lane-scroll {
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: #475569 transparent;
+}
+
+.lane-scroll::-webkit-scrollbar {
+  width: 4px;
+}
+
+.lane-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.lane-scroll::-webkit-scrollbar-thumb {
+  background-color: #475569;
+  border-radius: 2px;
+}
+
+/* Card hover glow */
+.card-glow:hover {
+  box-shadow: 0 0 10px #FFF200;
+  cursor: pointer;
+}
+
+/* Away card dim */
+.card-away {
+  opacity: 0.5;
+}
+
+/* Drag overlay ghost */
+.drag-ghost {
+  opacity: 0.3;
+}
+
+/* Toast animation */
+@keyframes slideInRight {
+  from {
+    transform: translateX(110%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+@keyframes fadeOut {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+.toast-enter {
+  animation: slideInRight 0.3s ease-out forwards;
+}
+
+.toast-exit {
+  animation: fadeOut 0.3s ease-in forwards;
+}
