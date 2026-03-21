@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 220 80" fill="none">
+  <!-- Circular icon mark -->
+  <!-- Outer dashed arc segments (white) -->
+  <g transform="translate(40,40)">
+    <!-- Main arc (bottom-left to top) -->
+    <path d="M -28 8 A 30 30 0 1 1 8 -28" stroke="white" stroke-width="5" stroke-linecap="round" fill="none"/>
+    <!-- Dash segment top-right -->
+    <path d="M 14 -27 A 30 30 0 0 1 22 -20" stroke="white" stroke-width="5" stroke-linecap="round" fill="none"/>
+    <!-- Dash segment right -->
+    <path d="M 27 -10 A 30 30 0 0 1 29 0" stroke="white" stroke-width="5" stroke-linecap="round" fill="none"/>
+    <!-- Dash segment bottom-right -->
+    <path d="M 27 10 A 30 30 0 0 1 20 22" stroke="white" stroke-width="5" stroke-linecap="round" fill="none"/>
+    <!-- Red abstract flag/shape inside -->
+    <polygon points="-14,-16 4,-16 10,-4 4,10 -14,10 -8,-4" fill="#E41C23"/>
+  </g>
+
+  <!-- NATIONAL BANK OPEN wordmark -->
+  <text x="82" y="26" font-family="Arial Black, Arial, sans-serif" font-weight="900" font-size="15" fill="white" letter-spacing="1">NATIONAL</text>
+  <text x="82" y="46" font-family="Arial Black, Arial, sans-serif" font-weight="900" font-size="15" fill="white" letter-spacing="1">BANK</text>
+  <text x="82" y="66" font-family="Arial Black, Arial, sans-serif" font-weight="900" font-size="15" fill="white" letter-spacing="1">OPEN</text>
+</svg>

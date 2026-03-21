@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <rect width="32" height="32" rx="4" fill="#E41C23"/>
+  <text
+    x="16"
+    y="22"
+    font-family="-apple-system, BlinkMacSystemFont, 'Arial Black', Arial, sans-serif"
+    font-size="12"
+    font-weight="900"
+    fill="white"
+    text-anchor="middle"
+    letter-spacing="0.5"
+  >NBO</text>
+</svg>

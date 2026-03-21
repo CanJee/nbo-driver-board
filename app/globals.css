@@ -67,6 +67,18 @@ body {
   opacity: 0.3;
 }
 
+/* Modal backdrop — fixed overlay, always centred on screen */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: rgba(0, 0, 0, 0.75);
+  backdrop-filter: blur(2px);
+}
+
 /* Toast animation */
 @keyframes slideInRight {
   from {

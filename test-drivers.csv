@@ -1,0 +1,20 @@
+name,phone,shift_type,shift_time,walkie_number,car_number,status,away_reason,lane,lane_order,notes
+John D.,(416) 555-0101,morning,07:00,W-01,C-01,assigned,,tennis_centre,0,
+Sarah M.,(416) 555-0102,morning,07:00,W-02,C-02,assigned,,tennis_centre,1,
+Carlos R.,(416) 555-0103,afternoon,13:00,W-03,C-03,assigned,,tennis_centre,2,
+Priya K.,(416) 555-0104,afternoon,13:00,,,unassigned,,tennis_centre,3,Needs walkie assigned
+Tom B.,(416) 555-0105,evening,18:00,W-05,C-05,assigned,,tennis_centre,4,
+Lisa W.,(416) 555-0106,morning,07:00,W-06,C-06,away,gas,tennis_centre,5,
+Marcus T.,(416) 555-0107,afternoon,13:00,W-07,C-07,assigned,,uptown_hotel,0,
+Nina S.,(416) 555-0108,morning,07:00,W-08,C-08,assigned,,uptown_hotel,1,VIP shuttle - Terminal 1
+Andre P.,(416) 555-0109,evening,18:00,,,unassigned,,uptown_hotel,2,
+James O.,(416) 555-0110,morning,07:00,W-10,C-10,assigned,,downtown_hotel,0,
+Fatima A.,(416) 555-0111,afternoon,13:00,W-11,C-11,assigned,,downtown_hotel,1,
+Kevin L.,(416) 555-0112,nightowl,23:00,W-12,C-12,assigned,,downtown_hotel,2,Late arrival pickup
+Rachel G.,(416) 555-0113,morning,07:00,W-13,C-13,away,carwash,airport,0,
+David N.,(416) 555-0114,afternoon,13:00,W-14,C-14,assigned,,airport,1,
+Sophia C.,(416) 555-0115,evening,18:00,,,unassigned,,airport,2,
+Omar H.,(416) 555-0116,morning,07:00,W-16,C-16,assigned,,other,0,
+Yuki T.,(416) 555-0117,afternoon,13:00,W-17,C-17,away,practice,other,1,
+Beth R.,(416) 555-0118,morning,07:00,W-18,C-18,assigned,,meals,0,Player meal run
+Daniel F.,(416) 555-0119,afternoon,13:00,W-19,C-19,assigned,,meals,1,
