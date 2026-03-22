@@ -56,6 +56,12 @@ export default function Board({ initialDrivers, initialDispatchers }: BoardProps
   // Suppress real-time refetch while dragging to avoid flicker
   const isDraggingRef = useRef(false);
 
+  // Track the true source lane at drag-start — handleDragOver mutates `drivers` state
+  // optimistically, so by the time handleDragEnd runs, draggedDriver.lane already
+  // reflects the target lane. Without this ref, cross-lane moves into empty lanes
+  // are misclassified as within-lane no-ops and never persisted.
+  const dragSourceLaneRef = useRef<LaneId | null>(null);
+
   const supabase = createClient();
 
   // Require 8px movement before drag activates — prevents conflict with click-to-expand
@@ -96,7 +102,10 @@ export default function Board({ initialDrivers, initialDispatchers }: BoardProps
   const handleDragStart = (event: DragStartEvent) => {
     isDraggingRef.current = true;
     const driver = drivers.find((d) => d.id === event.active.id);
-    if (driver) setActiveDriver(driver);
+    if (driver) {
+      setActiveDriver(driver);
+      dragSourceLaneRef.current = driver.lane; // capture original lane before any optimistic updates
+    }
   };
 
   // ── DRAG OVER (live preview while hovering) ──
@@ -153,7 +162,12 @@ export default function Board({ initialDrivers, initialDispatchers }: BoardProps
     isDraggingRef.current = false;
     setActiveDriver(null);
     const { active, over } = event;
-    if (!over) return;
+
+    // Always clear the source-lane ref, even if we return early
+    const sourceLane = dragSourceLaneRef.current;
+    dragSourceLaneRef.current = null;
+
+    if (!over || !sourceLane) return;
 
     const activeId = active.id as string;
     const overId = over.id as string;
@@ -165,8 +179,6 @@ export default function Board({ initialDrivers, initialDispatchers }: BoardProps
     const overDriver = !isOverLane ? drivers.find((d) => d.id === overId) : null;
     const targetLane = (isOverLane ? overId : overDriver?.lane) as LaneId;
     if (!targetLane) return;
-
-    const sourceLane = draggedDriver.lane as LaneId;
 
     let updatedDrivers: Driver[];
 
@@ -198,14 +210,20 @@ export default function Board({ initialDrivers, initialDispatchers }: BoardProps
 
     setDrivers(updatedDrivers);
 
-    // Persist only changed drivers to Supabase
-    const changed = updatedDrivers.filter((d) => {
-      const orig = initialDrivers.find((o) => o.id === d.id);
-      return !orig || orig.lane !== d.lane || orig.lane_order !== d.lane_order;
-    });
+    // Persist all drivers in the affected lane(s).
+    // We intentionally avoid diffing against initialDrivers (the server-rendered prop)
+    // because it never updates during a session — meaning a second drag that results in
+    // the same order as the original server snapshot would incorrectly be skipped.
+    const affectedLanes = sourceLane === targetLane
+      ? [sourceLane]
+      : [sourceLane, targetLane];
+
+    const toSave = updatedDrivers.filter((d) =>
+      affectedLanes.includes(d.lane as LaneId)
+    );
 
     await Promise.all(
-      changed.map((d) =>
+      toSave.map((d) =>
         supabase
           .from('drivers')
           .update({ lane: d.lane, lane_order: d.lane_order })
