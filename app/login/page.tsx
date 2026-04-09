@@ -1,5 +1,5 @@
 import Image from 'next/image';
-import { login } from './actions';
+import LoginForm from './LoginForm';
 
 export default async function LoginPage({
   searchParams,
@@ -37,44 +37,7 @@ export default async function LoginPage({
             Enter your access code to continue
           </p>
 
-          <form action={login} className="space-y-4">
-            <div>
-              <label
-                htmlFor="password"
-                className="block text-xs font-bold uppercase tracking-widest text-slate-500 mb-1.5"
-              >
-                Access Code
-              </label>
-              <input
-                id="password"
-                type="password"
-                name="password"
-                required
-                autoFocus
-                autoComplete="current-password"
-                className="w-full px-3 py-2.5 rounded-lg text-sm text-white outline-none focus:ring-1"
-                style={{
-                  backgroundColor: '#0D1117',
-                  border: `1px solid ${hasError ? '#E41C23' : '#2D3748'}`,
-                }}
-                placeholder="••••••••"
-              />
-            </div>
-
-            {hasError && (
-              <p className="text-sm text-red-400">
-                Incorrect access code. Please try again.
-              </p>
-            )}
-
-            <button
-              type="submit"
-              className="w-full py-2.5 rounded-lg text-sm font-bold text-white hover:opacity-80 transition-opacity"
-              style={{ backgroundColor: '#E41C23' }}
-            >
-              Sign In
-            </button>
-          </form>
+          <LoginForm hasError={hasError} />
         </div>
       </div>
     </div>

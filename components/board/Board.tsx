@@ -368,21 +368,12 @@ export default function Board({ initialDrivers, initialDispatchers }: BoardProps
           <div className="w-64 flex items-center justify-end gap-3">
             <button
               onClick={() => setShowCheckIn(true)}
-              className="px-4 py-1.5 rounded-lg text-xs font-black tracking-widest uppercase text-white transition-opacity hover:opacity-80"
+              className="px-4 py-1.5 rounded-lg text-xs font-black tracking-widest uppercase text-white transition-opacity hover:opacity-80 whitespace-nowrap"
               style={{ backgroundColor: '#E41C23', border: '1px solid #E41C23' }}
             >
               + Check In
             </button>
             <LiveClock />
-            <form action={logout}>
-              <button
-                type="submit"
-                className="text-[10px] font-bold uppercase tracking-widest text-slate-500 hover:text-slate-300 transition-colors"
-                title="Sign out"
-              >
-                Sign Out
-              </button>
-            </form>
           </div>
         </div>
 
@@ -407,8 +398,16 @@ export default function Board({ initialDrivers, initialDispatchers }: BoardProps
             />
           ))}
         </div>
-        {/* Footer credit */}
-        <div className="absolute bottom-0 left-0 right-0 flex items-center justify-center py-1.5 pointer-events-none">
+        {/* Footer */}
+        <div className="absolute bottom-0 left-0 right-0 flex items-center justify-between px-4 py-1.5 pointer-events-none">
+          <form action={logout} className="pointer-events-auto">
+            <button
+              type="submit"
+              className="text-[10px] font-bold uppercase tracking-widest text-slate-600 hover:text-slate-400 transition-colors"
+            >
+              Sign Out
+            </button>
+          </form>
           <p className="text-[10px] text-slate-600 tracking-wide">
             Designed &amp; built by{' '}
             <a
