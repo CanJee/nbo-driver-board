@@ -16,7 +16,7 @@ import {
 } from '@dnd-kit/core';
 import { arrayMove } from '@dnd-kit/sortable';
 import { createClient } from '@/lib/supabase/client';
-import { AwayReason, Driver, LaneId, MAIN_LANES, ShiftType } from '@/lib/types';
+import { AwayReason, Driver, LaneId, LocationStatus, MAIN_LANES, ShiftType } from '@/lib/types';
 import SwimLane from './SwimLane';
 import LiveClock from './LiveClock';
 import DriverCard from '@/components/cards/DriverCard';
@@ -26,6 +26,7 @@ import CheckInModal from '@/components/modals/CheckInModal';
 import CheckInCompleteModal from '@/components/modals/CheckInCompleteModal';
 import Toast from '@/components/ui/Toast';
 import Portal from '@/components/ui/Portal';
+import { logout } from '@/app/login/actions';
 
 interface DispatcherAssignment {
   lane: string;
@@ -267,6 +268,17 @@ export default function Board({ initialDrivers, initialDispatchers }: BoardProps
     await fetchDrivers();
   };
 
+  // ── SET LOCATION STATUS ──
+  const handleSetLocationStatus = async (driver: Driver, status: LocationStatus | null) => {
+    setDrivers((prev) =>
+      prev.map((d) => (d.id === driver.id ? { ...d, location_status: status } : d))
+    );
+    await supabase
+      .from('drivers')
+      .update({ location_status: status })
+      .eq('id', driver.id);
+  };
+
   // ── ASSIGN ──
   const handleAssign = async (walkieNumber: string, carNumber: string) => {
     if (!assignDriver) return;
@@ -338,7 +350,7 @@ export default function Board({ initialDrivers, initialDispatchers }: BoardProps
       onDragOver={handleDragOver}
       onDragEnd={handleDragEnd}
     >
-      <div className="flex flex-col h-screen p-3 gap-3" style={{ backgroundColor: '#0D1117' }}>
+      <div className="flex flex-col h-screen p-3 gap-3 relative" style={{ backgroundColor: '#0D1117' }}>
 
         {/* Header */}
         <div
@@ -362,11 +374,20 @@ export default function Board({ initialDrivers, initialDispatchers }: BoardProps
               + Check In
             </button>
             <LiveClock />
+            <form action={logout}>
+              <button
+                type="submit"
+                className="text-[10px] font-bold uppercase tracking-widest text-slate-500 hover:text-slate-300 transition-colors"
+                title="Sign out"
+              >
+                Sign Out
+              </button>
+            </form>
           </div>
         </div>
 
         {/* Board — 6 equal columns */}
-        <div className="flex flex-1 gap-2 min-h-0">
+        <div className="flex flex-1 gap-2 min-h-0 pb-6">
           {ALL_LANES.map((laneId) => (
             <SwimLane
               key={laneId}
@@ -381,9 +402,24 @@ export default function Board({ initialDrivers, initialDispatchers }: BoardProps
               onAssign={setAssignDriver}
               onUpdateNotes={handleUpdateNotes}
               onSetAway={handleSetAway}
+              onSetLocationStatus={handleSetLocationStatus}
               className="flex-1"
             />
           ))}
+        </div>
+        {/* Footer credit */}
+        <div className="absolute bottom-0 left-0 right-0 flex items-center justify-center py-1.5 pointer-events-none">
+          <p className="text-[10px] text-slate-600 tracking-wide">
+            Designed &amp; built by{' '}
+            <a
+              href="https://www.linkedin.com/in/hasankanjee"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-slate-500 hover:text-slate-300 transition-colors underline underline-offset-2 pointer-events-auto"
+            >
+              Hasan Kanjee
+            </a>
+          </p>
         </div>
       </div>
 
@@ -396,6 +432,7 @@ export default function Board({ initialDrivers, initialDispatchers }: BoardProps
             onAssign={() => {}}
             onUpdateNotes={() => {}}
             onSetAway={() => {}}
+            onSetLocationStatus={() => {}}
             isDragOverlay
           />
         )}

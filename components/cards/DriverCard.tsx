@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { ChevronUp, GripVertical, Pencil, Save, X } from 'lucide-react';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { AwayReason, Driver, SHIFT_COLORS, AWAY_ICONS, AWAY_LABELS } from '@/lib/types';
+import { AwayReason, Driver, LocationStatus, SHIFT_COLORS, AWAY_ICONS, AWAY_LABELS } from '@/lib/types';
 
 interface DriverCardProps {
   driver: Driver;
@@ -12,6 +12,7 @@ interface DriverCardProps {
   onAssign: (driver: Driver) => void;
   onUpdateNotes: (driver: Driver, notes: string) => void;
   onSetAway: (driver: Driver, reason: AwayReason | null) => void;
+  onSetLocationStatus: (driver: Driver, status: LocationStatus | null) => void;
   isDragOverlay?: boolean;
 }
 
@@ -21,6 +22,7 @@ export default function DriverCard({
   onAssign,
   onUpdateNotes,
   onSetAway,
+  onSetLocationStatus,
   isDragOverlay = false,
 }: DriverCardProps) {
   const [expanded, setExpanded] = useState(false);
@@ -111,11 +113,29 @@ export default function DriverCard({
                 )}
               </div>
             </div>
-            {isAway && driver.away_reason && (
-              <span className="text-lg flex-shrink-0 ml-2" title={AWAY_LABELS[driver.away_reason]}>
-                {AWAY_ICONS[driver.away_reason]}
-              </span>
-            )}
+            <div className="flex items-center gap-1.5 flex-shrink-0 ml-2">
+              {driver.location_status === 'en_route' && (
+                <span
+                  className="text-[9px] font-bold px-1.5 py-0.5 rounded-full leading-none"
+                  style={{ backgroundColor: '#92400E', color: '#FCD34D' }}
+                >
+                  → EN ROUTE
+                </span>
+              )}
+              {driver.location_status === 'at_location' && (
+                <span
+                  className="text-[9px] font-bold px-1.5 py-0.5 rounded-full leading-none"
+                  style={{ backgroundColor: '#14532D', color: '#4ADE80' }}
+                >
+                  ✓ AT LOCATION
+                </span>
+              )}
+              {isAway && driver.away_reason && (
+                <span className="text-lg" title={AWAY_LABELS[driver.away_reason]}>
+                  {AWAY_ICONS[driver.away_reason]}
+                </span>
+              )}
+            </div>
           </div>
         </div>
       )}
@@ -170,6 +190,39 @@ export default function DriverCard({
               Phone: <span className="text-slate-200">{driver.phone || '—'}</span>
             </div>
           </div>
+
+          {/* Location Status */}
+          {!isUnassigned && (
+            <div className="mb-3">
+              <div className="text-[10px] font-bold tracking-widest uppercase text-slate-500 mb-1.5">
+                Location Status
+              </div>
+              <div className="flex gap-1.5">
+                <button
+                  onClick={() => onSetLocationStatus(driver, driver.location_status === 'en_route' ? null : 'en_route')}
+                  className="flex-1 py-1.5 rounded text-[11px] font-bold transition-colors"
+                  style={
+                    driver.location_status === 'en_route'
+                      ? { backgroundColor: '#92400E', color: '#FCD34D', border: '1px solid #B45309' }
+                      : { backgroundColor: '#1C2333', color: '#64748B', border: '1px solid #2D3748' }
+                  }
+                >
+                  → En Route
+                </button>
+                <button
+                  onClick={() => onSetLocationStatus(driver, driver.location_status === 'at_location' ? null : 'at_location')}
+                  className="flex-1 py-1.5 rounded text-[11px] font-bold transition-colors"
+                  style={
+                    driver.location_status === 'at_location'
+                      ? { backgroundColor: '#14532D', color: '#4ADE80', border: '1px solid #16A34A' }
+                      : { backgroundColor: '#1C2333', color: '#64748B', border: '1px solid #2D3748' }
+                  }
+                >
+                  ✓ At Location
+                </button>
+              </div>
+            </div>
+          )}
 
           {/* Away Status */}
           <div className="mb-3">

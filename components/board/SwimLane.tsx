@@ -2,7 +2,7 @@
 
 import { useDroppable } from '@dnd-kit/core';
 import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
-import { AwayReason, Driver, LaneId } from '@/lib/types';
+import { AwayReason, Driver, LaneId, LocationStatus } from '@/lib/types';
 import LaneHeader from './LaneHeader';
 import DriverCard from '@/components/cards/DriverCard';
 
@@ -15,6 +15,7 @@ interface SwimLaneProps {
   onAssign: (driver: Driver) => void;
   onUpdateNotes: (driver: Driver, notes: string) => void;
   onSetAway: (driver: Driver, reason: AwayReason | null) => void;
+  onSetLocationStatus: (driver: Driver, status: LocationStatus | null) => void;
 }
 
 export default function SwimLane({
@@ -26,6 +27,7 @@ export default function SwimLane({
   onAssign,
   onUpdateNotes,
   onSetAway,
+  onSetLocationStatus,
 }: SwimLaneProps) {
   const { setNodeRef, isOver } = useDroppable({ id: laneId });
 
@@ -57,6 +59,7 @@ export default function SwimLane({
                 onAssign={onAssign}
                 onUpdateNotes={onUpdateNotes}
                 onSetAway={onSetAway}
+                onSetLocationStatus={onSetLocationStatus}
               />
             ))}
           </div>

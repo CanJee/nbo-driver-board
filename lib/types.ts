@@ -2,6 +2,8 @@ export type ShiftType = 'morning' | 'afternoon' | 'evening' | 'nightowl';
 
 export type DriverStatus = 'unassigned' | 'assigned' | 'away';
 
+export type LocationStatus = 'at_location' | 'en_route';
+
 export type AwayReason = 'gas' | 'carwash' | 'practice' | 'parking';
 
 export type LaneId =
@@ -24,6 +26,7 @@ export interface Driver {
   away_reason: AwayReason | null;
   lane: LaneId;
   lane_order: number;
+  location_status: LocationStatus | null;
   notes: string | null;
   checked_in_at: string;
   checked_out_at: string | null;
