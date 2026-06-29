@@ -1,0 +1,10 @@
+# Supabase CLI config — used by Supabase Branching to build preview/branch databases.
+# Migrations in supabase/migrations/ are applied automatically when a branch DB is created.
+project_id = "nbo-driver-board"
+
+[db]
+# Must match the prod Postgres major version (verify on prod: SHOW server_version;).
+major_version = 17
+
+[db.migrations]
+enabled = true
