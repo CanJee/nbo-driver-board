@@ -1,12 +1,12 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { CheckCircle } from 'lucide-react';
-import { LaneId, LANE_LABELS, SHIFT_COLORS, SHIFT_LABELS, ShiftType } from '@/lib/types';
+import { DriverShift, LaneId, LANE_LABELS, SHIFT_COLORS, SHIFT_LABELS } from '@/lib/types';
 
 interface CheckInCompleteModalProps {
   name: string;
-  shiftType: ShiftType;
+  shifts: DriverShift[];
   lane: LaneId;
   onDone: () => void;
 }
@@ -15,17 +15,19 @@ const AUTO_CLOSE_MS = 5000;
 
 export default function CheckInCompleteModal({
   name,
-  shiftType,
+  shifts,
   lane,
   onDone,
 }: CheckInCompleteModalProps) {
-  // Auto-close after 5 seconds
+  // Auto-close after 5 seconds. Read onDone via a ref so the timer is armed once
+  // on mount — the parent passes a fresh inline arrow each render (Board re-renders
+  // on every realtime drivers change), which would otherwise reset the timer forever.
+  const onDoneRef = useRef(onDone);
+  useEffect(() => { onDoneRef.current = onDone; }, [onDone]);
   useEffect(() => {
-    const timer = setTimeout(onDone, AUTO_CLOSE_MS);
+    const timer = setTimeout(() => onDoneRef.current(), AUTO_CLOSE_MS);
     return () => clearTimeout(timer);
-  }, [onDone]);
-
-  const shiftColor = SHIFT_COLORS[shiftType];
+  }, []);
 
   return (
     <div className="modal-backdrop" onClick={onDone}>
@@ -56,16 +58,21 @@ export default function CheckInCompleteModal({
           className="px-6 py-5 space-y-3"
           style={{ borderTop: '1px solid #16A34A' }}
         >
-          <div className="flex items-center justify-between">
-            <span className="text-[11px] font-bold tracking-widest uppercase text-slate-500">
-              Shift
+          <div className="flex items-start justify-between">
+            <span className="text-[11px] font-bold tracking-widest uppercase text-slate-500 mt-1">
+              {shifts.length > 1 ? 'Shifts' : 'Shift'}
             </span>
-            <span
-              className="text-sm font-bold px-3 py-0.5 rounded-full text-white"
-              style={{ backgroundColor: shiftColor }}
-            >
-              {SHIFT_LABELS[shiftType]}
-            </span>
+            <div className="flex flex-wrap gap-1.5 justify-end">
+              {shifts.map((s, i) => (
+                <span
+                  key={i}
+                  className="text-sm font-bold px-3 py-0.5 rounded-full text-white"
+                  style={{ backgroundColor: SHIFT_COLORS[s.shift_type] }}
+                >
+                  {SHIFT_LABELS[s.shift_type]}
+                </span>
+              ))}
+            </div>
           </div>
           <div className="flex items-center justify-between">
             <span className="text-[11px] font-bold tracking-widest uppercase text-slate-500">

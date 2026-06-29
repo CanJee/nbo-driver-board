@@ -4,7 +4,17 @@ import { useEffect, useRef, useState } from 'react';
 import { ChevronUp, GripVertical, Pencil, Save, X } from 'lucide-react';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { AwayReason, Driver, LocationStatus, SHIFT_COLORS, AWAY_ICONS, AWAY_LABELS } from '@/lib/types';
+import { AwayReason, Driver, LocationStatus, SHIFT_COLORS, SHIFT_LABELS, LANE_LABELS, AWAY_ICONS, AWAY_LABELS } from '@/lib/types';
+
+/** Build the left bar: solid for one shift, an evenly-split hard-stop gradient for multiple. */
+function shiftBarBackground(colors: string[]): string {
+  if (colors.length <= 1) return colors[0] ?? SHIFT_COLORS.morning;
+  const step = 100 / colors.length;
+  const stops = colors
+    .map((c, i) => `${c} ${(i * step).toFixed(2)}% ${((i + 1) * step).toFixed(2)}%`)
+    .join(', ');
+  return `linear-gradient(to bottom, ${stops})`;
+}
 
 interface DriverCardProps {
   driver: Driver;
@@ -56,16 +66,24 @@ export default function DriverCard({
 
   const isUnassigned = driver.status === 'unassigned';
   const isAway = driver.status === 'away';
-  const shiftColor = SHIFT_COLORS[driver.shift_type];
 
-  // Shift colour left bar is always visible; unassigned gets amber dashed on the other 3 sides
+  // One colour band per shift (de-duped) so a double shift shows e.g. blue+green.
+  // Fall back to the primary shift_type for legacy rows with no `shifts` array.
+  const shifts = driver.shifts?.length ? driver.shifts : null;
+  const barColors = [
+    ...new Set((shifts ?? [{ shift_type: driver.shift_type }]).map((s) => SHIFT_COLORS[s.shift_type])),
+  ];
+
+  // The shift colour now renders as an absolute left bar (supports the split gradient);
+  // unassigned still gets the amber dashed frame on the other 3 sides.
   const containerStyle: React.CSSProperties = {
-    borderLeft: `6px solid ${shiftColor}`,
+    borderLeft: 'none',
     borderTop:    isUnassigned ? '2px dashed #F59E0B' : '1px solid #2D3748',
     borderRight:  isUnassigned ? '2px dashed #F59E0B' : '1px solid #2D3748',
     borderBottom: isUnassigned ? '2px dashed #F59E0B' : '1px solid #2D3748',
     borderRadius: '6px',
     backgroundColor: '#1C2333',
+    paddingLeft: '6px',
   };
 
   const handleSaveNotes = () => {
@@ -84,6 +102,21 @@ export default function DriverCard({
       style={{ ...containerStyle, ...style }}
       className={`card-glow relative select-none ${isAway && !isDragOverlay ? 'card-away' : ''}`}
     >
+      {/* Shift colour bar — solid for one shift, split for double/triple */}
+      <div
+        aria-hidden
+        style={{
+          position: 'absolute',
+          left: 0,
+          top: 0,
+          bottom: 0,
+          width: '6px',
+          borderTopLeftRadius: '6px',
+          borderBottomLeftRadius: '6px',
+          background: shiftBarBackground(barColors),
+        }}
+      />
+
       {/* ── COLLAPSED VIEW ── */}
       {!expanded && (
         <div className="flex items-center h-[60px]">
@@ -190,6 +223,28 @@ export default function DriverCard({
               Phone: <span className="text-slate-200">{driver.phone || '—'}</span>
             </div>
           </div>
+
+          {/* Today's shifts */}
+          {shifts && shifts.length > 0 && (
+            <div className="mb-3">
+              <div className="text-[10px] font-bold tracking-widest uppercase text-slate-500 mb-1.5">
+                {shifts.length > 1 ? 'Shifts' : 'Shift'}
+              </div>
+              <div className="space-y-1">
+                {shifts.map((s, i) => (
+                  <div key={i} className="flex items-center gap-2 text-xs text-slate-300">
+                    <span
+                      className="inline-block w-2.5 h-2.5 rounded-sm flex-shrink-0"
+                      style={{ backgroundColor: SHIFT_COLORS[s.shift_type] }}
+                    />
+                    <span className="font-semibold text-white">{SHIFT_LABELS[s.shift_type]}</span>
+                    {s.label && <span className="text-slate-400">{s.label}</span>}
+                    <span className="text-slate-500">· {LANE_LABELS[s.lane]}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Location Status */}
           {!isUnassigned && (

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import Image from 'next/image';
+import Link from 'next/link';
 import {
   DndContext,
   DragEndEvent,
@@ -16,13 +17,13 @@ import {
 } from '@dnd-kit/core';
 import { arrayMove } from '@dnd-kit/sortable';
 import { createClient } from '@/lib/supabase/client';
-import { AwayReason, Driver, LaneId, LocationStatus, MAIN_LANES, ShiftType } from '@/lib/types';
+import { AwayReason, Driver, DriverShift, LaneId, LocationStatus, MAIN_LANES } from '@/lib/types';
 import SwimLane from './SwimLane';
 import LiveClock from './LiveClock';
 import DriverCard from '@/components/cards/DriverCard';
 import CheckOutModal from '@/components/modals/CheckOutModal';
 import AssignModal from '@/components/modals/AssignModal';
-import CheckInModal from '@/components/modals/CheckInModal';
+import CheckInModal, { CheckInData } from '@/components/modals/CheckInModal';
 import CheckInCompleteModal from '@/components/modals/CheckInCompleteModal';
 import Toast from '@/components/ui/Toast';
 import Portal from '@/components/ui/Portal';
@@ -49,7 +50,7 @@ export default function Board({ initialDrivers, initialDispatchers }: BoardProps
   const [showCheckIn, setShowCheckIn] = useState(false);
   const [checkInComplete, setCheckInComplete] = useState<{
     name: string;
-    shiftType: ShiftType;
+    shifts: DriverShift[];
     lane: LaneId;
   } | null>(null);
   const [toast, setToast] = useState<string | null>(null);
@@ -295,16 +296,7 @@ export default function Board({ initialDrivers, initialDispatchers }: BoardProps
   };
 
   // ── CHECK IN ──
-  const handleCheckIn = async (data: {
-    rosterId: string | null;
-    name: string;
-    phone: string;
-    shiftType: ShiftType;
-    shiftTime: string;
-    lane: LaneId;
-    walkieNumber: string;
-    carNumber: string;
-  }) => {
+  const handleCheckIn = async (data: CheckInData) => {
     const laneDrivers = drivers.filter((d) => d.lane === data.lane);
     const nextOrder = laneDrivers.length;
 
@@ -312,8 +304,10 @@ export default function Board({ initialDrivers, initialDispatchers }: BoardProps
       roster_id: data.rosterId,
       name: data.name,
       phone: data.phone,
+      role: data.role,
       shift_type: data.shiftType,
       shift_time: data.shiftTime,
+      shifts: data.shifts,
       lane: data.lane,
       lane_order: nextOrder,
       walkie_number: data.walkieNumber || null,
@@ -323,7 +317,7 @@ export default function Board({ initialDrivers, initialDispatchers }: BoardProps
 
     if (!error) {
       setShowCheckIn(false);
-      setCheckInComplete({ name: data.name, shiftType: data.shiftType, lane: data.lane });
+      setCheckInComplete({ name: data.name, shifts: data.shifts, lane: data.lane });
       await fetchDrivers();
     }
   };
@@ -366,6 +360,13 @@ export default function Board({ initialDrivers, initialDispatchers }: BoardProps
             <span style={{ color: '#E41C23' }}>Live Status</span>
           </h1>
           <div className="w-64 flex items-center justify-end gap-3">
+            <Link
+              href="/import"
+              className="px-3 py-1.5 rounded-lg text-xs font-bold tracking-widest uppercase text-slate-300 hover:text-white transition-colors whitespace-nowrap"
+              style={{ border: '1px solid #2D3748' }}
+            >
+              Import
+            </Link>
             <button
               onClick={() => setShowCheckIn(true)}
               className="px-4 py-1.5 rounded-lg text-xs font-black tracking-widest uppercase text-white transition-opacity hover:opacity-80 whitespace-nowrap"
@@ -448,7 +449,7 @@ export default function Board({ initialDrivers, initialDispatchers }: BoardProps
         {checkInComplete && (
           <CheckInCompleteModal
             name={checkInComplete.name}
-            shiftType={checkInComplete.shiftType}
+            shifts={checkInComplete.shifts}
             lane={checkInComplete.lane}
             onDone={() => setCheckInComplete(null)}
           />
