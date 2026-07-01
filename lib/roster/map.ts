@@ -27,7 +27,8 @@ export function normalizeName(name: string): string {
 const LANE_KEYWORDS: [RegExp, LaneId][] = [
   [/tennis/i, 'tennis_centre'],
   [/uptown/i, 'uptown_hotel'],
-  [/downtown/i, 'downtown_hotel'],
+  // `downtown` intentionally unmapped for 2026 (no downtown hotel) — such rows fall
+  // through to the "Other" lane with a warning. Restore this line to re-enable it.
   [/airport/i, 'airport'],
   [/meal/i, 'meals'],
 ];

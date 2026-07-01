@@ -378,18 +378,14 @@ export default function Board({ initialDrivers, initialDispatchers }: BoardProps
           </div>
         </div>
 
-        {/* Board — 6 equal columns */}
+        {/* Board — 5 equal columns */}
         <div className="flex flex-1 gap-2 min-h-0 pb-6">
           {ALL_LANES.map((laneId) => (
             <SwimLane
               key={laneId}
               laneId={laneId}
               drivers={driversInLane(laneId)}
-              dispatcher={
-                laneId === 'uptown_hotel' || laneId === 'downtown_hotel'
-                  ? getDispatcher(laneId)
-                  : undefined
-              }
+              dispatcher={laneId === 'uptown_hotel' ? getDispatcher(laneId) : undefined}
               onCheckOut={setCheckOutDriver}
               onAssign={setAssignDriver}
               onUpdateNotes={handleUpdateNotes}
