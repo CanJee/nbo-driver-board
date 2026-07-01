@@ -41,16 +41,34 @@ CREATE TABLE IF NOT EXISTS dispatcher_assignments (
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Seed default dispatcher slots
+-- Seed default dispatcher slots (idempotent — only inserts lanes not already present;
+-- there is no UNIQUE(lane), so ON CONFLICT can't guard this)
 INSERT INTO dispatcher_assignments (lane, dispatcher_name)
-VALUES ('uptown_hotel', ''), ('downtown_hotel', '')
-ON CONFLICT DO NOTHING;
+SELECT v.lane, ''
+FROM (VALUES ('uptown_hotel'), ('downtown_hotel')) AS v(lane)
+WHERE NOT EXISTS (
+  SELECT 1 FROM dispatcher_assignments d WHERE d.lane = v.lane
+);
 
 -- =============================================
--- Enable Realtime on drivers table
+-- Enable Realtime (idempotent — ALTER PUBLICATION ADD TABLE has no IF NOT EXISTS,
+-- so skip tables already in the publication)
 -- =============================================
-ALTER PUBLICATION supabase_realtime ADD TABLE drivers;
-ALTER PUBLICATION supabase_realtime ADD TABLE dispatcher_assignments;
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_publication_tables
+    WHERE pubname = 'supabase_realtime' AND schemaname = 'public' AND tablename = 'drivers'
+  ) THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE drivers;
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_publication_tables
+    WHERE pubname = 'supabase_realtime' AND schemaname = 'public' AND tablename = 'dispatcher_assignments'
+  ) THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE dispatcher_assignments;
+  END IF;
+END $$;
 
 -- =============================================
 -- Indexes for performance

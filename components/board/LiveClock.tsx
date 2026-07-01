@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { TOURNAMENT_TZ } from '@/lib/date';
 
 export default function LiveClock() {
   const [time, setTime] = useState('');
@@ -10,6 +11,7 @@ export default function LiveClock() {
       const now = new Date();
       setTime(
         now.toLocaleTimeString('en-CA', {
+          timeZone: TOURNAMENT_TZ,
           hour: '2-digit',
           minute: '2-digit',
           hour12: false,

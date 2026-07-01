@@ -16,5 +16,9 @@ fi
 # Self-skips on non-preview builds and when prod credentials aren't configured.
 node scripts/clone-prod-to-preview.mjs
 
+# Recreate the shared dispatcher login in the preview DB (auth users aren't part
+# of the Data-API clone). Self-skips on non-preview / when no preview password is set.
+node scripts/seed-preview-user.mjs
+
 # Build the app.
 ./node_modules/.bin/next build

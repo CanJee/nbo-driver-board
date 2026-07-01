@@ -77,6 +77,12 @@ async function main() {
       console.log(`  · ${table}: 0 rows`);
       continue;
     }
+    // The preview DB is on the current schema, but prod may still hold legacy data
+    // from before a migration reached it. Normalize known-incompatible values so a
+    // not-yet-migrated prod can still seed the preview (mirrors the migrations).
+    for (const row of rows) {
+      if (row.shift_type === 'nightowl') row.shift_type = 'evening';
+    }
     for (let i = 0; i < rows.length; i += PAGE) {
       const { error } = await target.from(table).insert(rows.slice(i, i + PAGE));
       if (error) throw new Error(`insert ${table}: ${error.message}`);

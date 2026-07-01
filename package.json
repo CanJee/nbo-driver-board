@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "clone-prod": "node scripts/clone-prod-to-preview.mjs"
+    "clone-prod": "node scripts/clone-prod-to-preview.mjs",
+    "seed-preview-user": "node scripts/seed-preview-user.mjs"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
