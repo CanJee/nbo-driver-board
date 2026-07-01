@@ -18,6 +18,11 @@ live prod. (Production deploys are unchanged: they use the prod project.)
    `roster`, `dispatcher_assignments`, and `drivers` from prod into the preview DB.
    It is **idempotent** (skips if the preview DB already has data) and **refuses** to
    run if source and target resolve to the same project.
+5. [`scripts/seed-preview-user.mjs`](scripts/seed-preview-user.mjs) recreates the shared
+   dispatcher login in the preview DB. Supabase **auth users live in the `auth` schema**,
+   which the Data-API clone can't touch, so a fresh preview DB has no users. This creates
+   the `DISPATCHER_EMAIL` account with `PREVIEW_DISPATCHER_PASSWORD` (prod passwords can't
+   be copied — the Admin API never exposes hashes).
 
 ## One-time setup
 
@@ -28,7 +33,8 @@ live prod. (Production deploys are unchanged: they use the prod project.)
 3. **Vercel → Settings → Environment Variables → Preview scope:** add
    - `PROD_SUPABASE_URL` = the prod project URL
    - `PROD_SUPABASE_SERVICE_ROLE_KEY` = the prod project's service-role key
-   (These are the clone *source*. Do **not** add them to Production scope.)
+   - `PREVIEW_DISPATCHER_PASSWORD` = a password you'll use to log in on preview deploys
+   (`PROD_*` are the clone *source*. Do **not** add them to Production scope.)
 4. **Vercel → Production scope:** keep `NEXT_PUBLIC_SUPABASE_URL` and
    `NEXT_PUBLIC_SUPABASE_ANON_KEY` pointed at prod, as today.
 
