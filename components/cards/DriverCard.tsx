@@ -78,11 +78,11 @@ export default function DriverCard({
   // unassigned still gets the amber dashed frame on the other 3 sides.
   const containerStyle: React.CSSProperties = {
     borderLeft: 'none',
-    borderTop:    isUnassigned ? '2px dashed #F59E0B' : '1px solid #2D3748',
-    borderRight:  isUnassigned ? '2px dashed #F59E0B' : '1px solid #2D3748',
-    borderBottom: isUnassigned ? '2px dashed #F59E0B' : '1px solid #2D3748',
+    borderTop:    isUnassigned ? '2px dashed var(--status-warn)' : '1px solid var(--edge)',
+    borderRight:  isUnassigned ? '2px dashed var(--status-warn)' : '1px solid var(--edge)',
+    borderBottom: isUnassigned ? '2px dashed var(--status-warn)' : '1px solid var(--edge)',
     borderRadius: '6px',
-    backgroundColor: '#1C2333',
+    backgroundColor: 'var(--surface-card)',
     paddingLeft: '6px',
   };
 
@@ -124,7 +124,7 @@ export default function DriverCard({
             {...attributes}
             {...listeners}
             suppressHydrationWarning
-            className="flex items-center justify-center w-7 h-full cursor-grab active:cursor-grabbing text-slate-600 hover:text-slate-400 flex-shrink-0"
+            className="flex items-center justify-center w-7 h-full cursor-grab active:cursor-grabbing text-fg-ghost hover:text-fg-muted flex-shrink-0"
           >
             <GripVertical size={15} />
           </div>
@@ -133,14 +133,14 @@ export default function DriverCard({
             onClick={() => setExpanded(true)}
           >
             <div className="min-w-0">
-              <div className="text-base font-bold text-white truncate leading-snug">
+              <div className="text-base font-bold text-fg-strong truncate leading-snug">
                 {driver.name}
               </div>
               <div className="text-xs mt-0.5 leading-snug">
                 {isUnassigned ? (
-                  <span className="italic text-amber-400">Walkie: --&nbsp;&nbsp;Car: --</span>
+                  <span className="italic text-amber-700 dark:text-amber-400">Walkie: --&nbsp;&nbsp;Car: --</span>
                 ) : (
-                  <span className="text-slate-300">
+                  <span className="text-fg-soft">
                     Walkie: {driver.walkie_number ?? '--'}&nbsp;&nbsp;Car: {driver.car_number ?? '--'}
                   </span>
                 )}
@@ -150,7 +150,7 @@ export default function DriverCard({
               {driver.location_status === 'en_route' && (
                 <span
                   className="text-[9px] font-bold px-1.5 py-0.5 rounded-full leading-none"
-                  style={{ backgroundColor: '#92400E', color: '#FCD34D' }}
+                  style={{ backgroundColor: 'var(--status-warn-strong-bg)', color: 'var(--status-warn-fg)' }}
                 >
                   → EN ROUTE
                 </span>
@@ -158,7 +158,7 @@ export default function DriverCard({
               {driver.location_status === 'at_location' && (
                 <span
                   className="text-[9px] font-bold px-1.5 py-0.5 rounded-full leading-none"
-                  style={{ backgroundColor: '#14532D', color: '#4ADE80' }}
+                  style={{ backgroundColor: 'var(--status-success-strong-bg)', color: 'var(--status-success-bright)' }}
                 >
                   ✓ AT LOCATION
                 </span>
@@ -184,15 +184,15 @@ export default function DriverCard({
                 {...attributes}
                 {...listeners}
                 suppressHydrationWarning
-                className="cursor-grab active:cursor-grabbing text-slate-600 hover:text-slate-400 flex-shrink-0"
+                className="cursor-grab active:cursor-grabbing text-fg-ghost hover:text-fg-muted flex-shrink-0"
               >
                 <GripVertical size={14} />
               </div>
-              <span className="text-base font-bold text-white truncate">{driver.name}</span>
+              <span className="text-base font-bold text-fg-strong truncate">{driver.name}</span>
             </div>
             <button
               onClick={() => setExpanded(false)}
-              className="text-slate-500 hover:text-white ml-2 flex-shrink-0 transition-colors"
+              className="text-fg-faint hover:text-fg-strong ml-2 flex-shrink-0 transition-colors"
             >
               <ChevronUp size={16} />
             </button>
@@ -201,45 +201,45 @@ export default function DriverCard({
           {/* Walkie / Car / Phone */}
           <div className="mb-3 space-y-1">
             <div className="flex items-center justify-between">
-              <div className="text-sm text-slate-300">
+              <div className="text-sm text-fg-soft">
                 {isUnassigned ? (
-                  <span className="italic text-amber-400">Walkie: --&nbsp;&nbsp;Car: --</span>
+                  <span className="italic text-amber-700 dark:text-amber-400">Walkie: --&nbsp;&nbsp;Car: --</span>
                 ) : (
                   <span>
-                    Walkie: <span className="text-white font-medium">{driver.walkie_number ?? '--'}</span>
+                    Walkie: <span className="text-fg-strong font-medium">{driver.walkie_number ?? '--'}</span>
                     &nbsp;&nbsp;
-                    Car: <span className="text-white font-medium">{driver.car_number ?? '--'}</span>
+                    Car: <span className="text-fg-strong font-medium">{driver.car_number ?? '--'}</span>
                   </span>
                 )}
               </div>
               <button
                 onClick={() => onAssign(driver)}
-                className="flex items-center gap-1 text-[10px] text-slate-500 hover:text-blue-400 transition-colors ml-2 flex-shrink-0"
+                className="flex items-center gap-1 text-[10px] text-fg-faint hover:text-accent-blue transition-colors ml-2 flex-shrink-0"
               >
                 <Pencil size={11} /><span>Edit</span>
               </button>
             </div>
-            <div className="text-sm text-slate-400">
-              Phone: <span className="text-slate-200">{driver.phone || '—'}</span>
+            <div className="text-sm text-fg-muted">
+              Phone: <span className="text-fg-bright">{driver.phone || '—'}</span>
             </div>
           </div>
 
           {/* Today's shifts */}
           {shifts && shifts.length > 0 && (
             <div className="mb-3">
-              <div className="text-[10px] font-bold tracking-widest uppercase text-slate-500 mb-1.5">
+              <div className="text-[10px] font-bold tracking-widest uppercase text-fg-faint mb-1.5">
                 {shifts.length > 1 ? 'Shifts' : 'Shift'}
               </div>
               <div className="space-y-1">
                 {shifts.map((s, i) => (
-                  <div key={i} className="flex items-center gap-2 text-xs text-slate-300">
+                  <div key={i} className="flex items-center gap-2 text-xs text-fg-soft">
                     <span
                       className="inline-block w-2.5 h-2.5 rounded-sm flex-shrink-0"
                       style={{ backgroundColor: SHIFT_COLORS[s.shift_type] }}
                     />
-                    <span className="font-semibold text-white">{SHIFT_LABELS[s.shift_type]}</span>
-                    {s.label && <span className="text-slate-400">{s.label}</span>}
-                    <span className="text-slate-500">· {LANE_LABELS[s.lane]}</span>
+                    <span className="font-semibold text-fg-strong">{SHIFT_LABELS[s.shift_type]}</span>
+                    {s.label && <span className="text-fg-muted">{s.label}</span>}
+                    <span className="text-fg-faint">· {LANE_LABELS[s.lane]}</span>
                   </div>
                 ))}
               </div>
@@ -249,7 +249,7 @@ export default function DriverCard({
           {/* Location Status */}
           {!isUnassigned && (
             <div className="mb-3">
-              <div className="text-[10px] font-bold tracking-widest uppercase text-slate-500 mb-1.5">
+              <div className="text-[10px] font-bold tracking-widest uppercase text-fg-faint mb-1.5">
                 Location Status
               </div>
               <div className="flex gap-1.5">
@@ -258,8 +258,8 @@ export default function DriverCard({
                   className="flex-1 py-1.5 rounded text-[11px] font-bold transition-colors"
                   style={
                     driver.location_status === 'en_route'
-                      ? { backgroundColor: '#92400E', color: '#FCD34D', border: '1px solid #B45309' }
-                      : { backgroundColor: '#1C2333', color: '#64748B', border: '1px solid #2D3748' }
+                      ? { backgroundColor: 'var(--status-warn-strong-bg)', color: 'var(--status-warn-fg)', border: '1px solid #B45309' }
+                      : { backgroundColor: 'var(--surface-card)', color: 'var(--fg-faint)', border: '1px solid var(--edge)' }
                   }
                 >
                   → En Route
@@ -269,8 +269,8 @@ export default function DriverCard({
                   className="flex-1 py-1.5 rounded text-[11px] font-bold transition-colors"
                   style={
                     driver.location_status === 'at_location'
-                      ? { backgroundColor: '#14532D', color: '#4ADE80', border: '1px solid #16A34A' }
-                      : { backgroundColor: '#1C2333', color: '#64748B', border: '1px solid #2D3748' }
+                      ? { backgroundColor: 'var(--status-success-strong-bg)', color: 'var(--status-success-bright)', border: '1px solid var(--status-success)' }
+                      : { backgroundColor: 'var(--surface-card)', color: 'var(--fg-faint)', border: '1px solid var(--edge)' }
                   }
                 >
                   ✓ At Location
@@ -281,19 +281,19 @@ export default function DriverCard({
 
           {/* Away Status */}
           <div className="mb-3">
-            <div className="text-[10px] font-bold tracking-widest uppercase text-slate-500 mb-1.5">
+            <div className="text-[10px] font-bold tracking-widest uppercase text-fg-faint mb-1.5">
               Away Status
             </div>
             {isAway ? (
               <div className="flex items-center gap-2">
                 <span className="text-sm">
                   {driver.away_reason && AWAY_ICONS[driver.away_reason]}{' '}
-                  <span className="text-slate-300">{driver.away_reason && AWAY_LABELS[driver.away_reason]}</span>
+                  <span className="text-fg-soft">{driver.away_reason && AWAY_LABELS[driver.away_reason]}</span>
                 </span>
                 <button
                   onClick={() => onSetAway(driver, null)}
                   className="text-[11px] font-bold px-2.5 py-1 rounded text-white ml-auto"
-                  style={{ backgroundColor: '#16A34A' }}
+                  style={{ backgroundColor: 'var(--status-success)' }}
                 >
                   ✓ Returned
                 </button>
@@ -305,11 +305,11 @@ export default function DriverCard({
                     key={reason}
                     onClick={() => onSetAway(driver, reason)}
                     title={AWAY_LABELS[reason]}
-                    className="flex flex-col items-center gap-0.5 px-2 py-1 rounded transition-colors hover:bg-slate-700 text-center"
-                    style={{ border: '1px solid #374151' }}
+                    className="flex flex-col items-center gap-0.5 px-2 py-1 rounded transition-colors hover:bg-black/5 dark:hover:bg-white/10 text-center"
+                    style={{ border: '1px solid var(--edge-muted)' }}
                   >
                     <span className="text-base">{icon}</span>
-                    <span className="text-[8px] text-slate-500 leading-none">{AWAY_LABELS[reason].split(' ')[0]}</span>
+                    <span className="text-[8px] text-fg-faint leading-none">{AWAY_LABELS[reason].split(' ')[0]}</span>
                   </button>
                 ))}
               </div>
@@ -319,11 +319,11 @@ export default function DriverCard({
           {/* Notes */}
           <div className="mb-3">
             <div className="flex items-center justify-between mb-1">
-              <span className="text-[10px] font-bold tracking-widest uppercase text-slate-500">Notes</span>
+              <span className="text-[10px] font-bold tracking-widest uppercase text-fg-faint">Notes</span>
               {!editingNotes && (
                 <button
                   onClick={() => setEditingNotes(true)}
-                  className="flex items-center gap-1 text-[10px] text-slate-500 hover:text-blue-400 transition-colors"
+                  className="flex items-center gap-1 text-[10px] text-fg-faint hover:text-accent-blue transition-colors"
                 >
                   <Pencil size={11} /><span>Edit</span>
                 </button>
@@ -335,22 +335,22 @@ export default function DriverCard({
                   ref={notesRef}
                   value={notesValue}
                   onChange={(e) => setNotesValue(e.target.value)}
-                  className="w-full text-sm text-slate-200 rounded p-2 resize-none outline-none"
-                  style={{ backgroundColor: '#0D1117', border: '1px solid #3B82F6', minHeight: '60px' }}
+                  className="w-full text-sm text-fg-bright rounded p-2 resize-none outline-none"
+                  style={{ backgroundColor: 'var(--surface-input)', border: '1px solid #3B82F6', minHeight: '60px' }}
                   placeholder="Add a note..."
                 />
                 <div className="flex gap-2 mt-1.5">
                   <button
                     onClick={handleSaveNotes}
                     className="flex items-center gap-1 text-[11px] font-bold px-2.5 py-1 rounded text-white"
-                    style={{ backgroundColor: '#16A34A' }}
+                    style={{ backgroundColor: 'var(--status-success)' }}
                   >
                     <Save size={11} /> Save
                   </button>
                   <button
                     onClick={handleCancelNotes}
-                    className="flex items-center gap-1 text-[11px] font-bold px-2.5 py-1 rounded text-slate-300"
-                    style={{ backgroundColor: '#2D3748' }}
+                    className="flex items-center gap-1 text-[11px] font-bold px-2.5 py-1 rounded text-fg-soft"
+                    style={{ backgroundColor: 'var(--surface-button)' }}
                   >
                     <X size={11} /> Cancel
                   </button>
@@ -358,11 +358,11 @@ export default function DriverCard({
               </div>
             ) : (
               <div
-                className="text-sm text-slate-300 rounded p-2 min-h-[40px] leading-relaxed cursor-text"
-                style={{ backgroundColor: '#0D1117', border: '1px solid #2D3748' }}
+                className="text-sm text-fg-soft rounded p-2 min-h-[40px] leading-relaxed cursor-text"
+                style={{ backgroundColor: 'var(--surface-input)', border: '1px solid var(--edge)' }}
                 onClick={() => setEditingNotes(true)}
               >
-                {driver.notes || <span className="text-slate-600 italic">Click to add notes...</span>}
+                {driver.notes || <span className="text-fg-ghost italic">Click to add notes...</span>}
               </div>
             )}
           </div>
@@ -382,7 +382,7 @@ export default function DriverCard({
               <button
                 onClick={() => onCheckOut(driver)}
                 className="text-xs font-bold px-3 py-1.5 rounded text-white hover:opacity-80 transition-opacity"
-                style={{ backgroundColor: '#E41C23' }}
+                style={{ backgroundColor: 'var(--brand)' }}
               >
                 CHECK OUT
               </button>

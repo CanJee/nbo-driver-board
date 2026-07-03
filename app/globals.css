@@ -1,18 +1,130 @@
 @import "tailwindcss";
 
-:root {
-  --shift-morning: #3B82F6;
-  --shift-afternoon: #10B981;
-  --shift-evening: #8B5CF6;
+@custom-variant dark (&:is(.dark *));
 
-  --bg-dark: #0F172A;
-  --bg-lane: #1E293B;
-  --bg-header: #1E293B;
-  --bg-card: #334155;
-  --text-primary: #F1F5F9;
-  --text-secondary: #94A3B8;
-  --border-assigned: #475569;
-  --border-unassigned: #F59E0B;
+/*
+ * Theme tokens — the single source of truth for every color in the app.
+ * Light values live on :root, dark overrides on .dark (next-themes sets the
+ * class on <html>). Components consume these via var(--…) in inline styles
+ * or via the Tailwind utilities mapped in @theme below — never raw hexes.
+ * The .dark values are the app's original dark palette, unchanged.
+ */
+:root {
+  color-scheme: light;
+
+  --surface-page: #F6F8FA;
+  --surface-panel: #FFFFFF;
+  --surface-inset: #EFF2F5;
+  --surface-card: #FFFFFF;
+  --surface-zebra: #F0F3F6;
+  --surface-input: #FFFFFF;
+  --surface-button: #DFE5EB;
+  --surface-lane-header: #FBEAEA;
+  --surface-drag-over: #E3F2E3;
+  --surface-badge-muted: #64748B;
+
+  --edge: #D0D7DE;
+  --edge-muted: #AFB8C1;
+
+  --fg-strong: #0F172A;
+  --fg: #1F2328;
+  --fg-bright: #1F2328;
+  --fg-soft: #424A53;
+  --fg-muted: #57606A;
+  --fg-faint: #6E7781;
+  --fg-ghost: #8C959F;
+
+  --brand: #E41C23;
+  --accent-blue: #2563EB;
+
+  --status-error-bg: #FEE2E2;
+  --status-error-fg: #991B1B;
+  --status-success: #16A34A;
+  --status-success-bg: #DCFCE7;
+  --status-success-fg: #14532D;
+  --status-success-strong-bg: #BBF7D0;
+  --status-success-bright: #166534;
+  --status-warn: #D97706;
+  --status-warn-bg: #FEF3C7;
+  --status-warn-strong-bg: #FDE68A;
+  --status-warn-fg: #92400E;
+  --surface-chip: #EFF2F5;
+
+  --card-glow: rgba(217, 119, 6, 0.55);
+  --scrollbar-thumb: #C1C8CF;
+  --backdrop: rgba(15, 23, 42, 0.45);
+}
+
+.dark {
+  color-scheme: dark;
+
+  --surface-page: #0D1117;
+  --surface-panel: #161B22;
+  --surface-inset: #0B0F14;
+  --surface-card: #1C2333;
+  --surface-zebra: #12161D;
+  --surface-input: #0D1117;
+  --surface-button: #2D3748;
+  --surface-lane-header: #1C0A0A;
+  --surface-drag-over: #1A2A1A;
+  --surface-badge-muted: #374151;
+
+  --edge: #2D3748;
+  --edge-muted: #374151;
+
+  --fg-strong: #FFFFFF;
+  --fg: #F1F5F9;
+  --fg-bright: #E2E8F0; /* slate-200 — sits between --fg and --fg-soft */
+  --fg-soft: #CBD5E1;
+  --fg-muted: #94A3B8;
+  --fg-faint: #64748B;
+  --fg-ghost: #475569;
+
+  --brand: #E41C23;
+  --accent-blue: #60A5FA;
+
+  --status-error-bg: #7F1D1D;
+  --status-error-fg: #FFFFFF;
+  --status-success: #16A34A;
+  --status-success-bg: #052E16;
+  --status-success-fg: #FFFFFF;
+  --status-success-strong-bg: #14532D;
+  --status-success-bright: #4ADE80;
+  --status-warn: #F59E0B;
+  --status-warn-bg: #3F2D0A;
+  --status-warn-strong-bg: #92400E;
+  --status-warn-fg: #FCD34D;
+  --surface-chip: #161B22;
+
+  --card-glow: #FFF200;
+  --scrollbar-thumb: #475569;
+  --backdrop: rgba(0, 0, 0, 0.75);
+}
+
+/* Expose tokens as Tailwind utilities: bg-page, bg-panel, text-fg-muted,
+   border-edge, accent-brand, … They flip automatically with the theme. */
+@theme inline {
+  --color-page: var(--surface-page);
+  --color-panel: var(--surface-panel);
+  --color-inset: var(--surface-inset);
+  --color-card: var(--surface-card);
+  --color-zebra: var(--surface-zebra);
+  --color-input: var(--surface-input);
+  --color-button: var(--surface-button);
+  --color-lane-header: var(--surface-lane-header);
+  --color-drag-over: var(--surface-drag-over);
+  --color-badge-muted: var(--surface-badge-muted);
+  --color-edge: var(--edge);
+  --color-edge-muted: var(--edge-muted);
+  --color-fg-strong: var(--fg-strong);
+  --color-fg: var(--fg);
+  --color-fg-bright: var(--fg-bright);
+  --color-fg-soft: var(--fg-soft);
+  --color-fg-muted: var(--fg-muted);
+  --color-fg-faint: var(--fg-faint);
+  --color-fg-ghost: var(--fg-ghost);
+  --color-brand: var(--brand);
+  --color-accent-blue: var(--accent-blue);
 }
 
 * {
@@ -23,8 +135,8 @@ html,
 body {
   margin: 0;
   padding: 0;
-  background-color: var(--bg-dark);
-  color: var(--text-primary);
+  background-color: var(--surface-page);
+  color: var(--fg);
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   height: 100vh;
   width: 100vw;
@@ -34,7 +146,7 @@ body {
 .lane-scroll {
   overflow-y: auto;
   scrollbar-width: thin;
-  scrollbar-color: #475569 transparent;
+  scrollbar-color: var(--scrollbar-thumb) transparent;
 }
 
 .lane-scroll::-webkit-scrollbar {
@@ -46,13 +158,13 @@ body {
 }
 
 .lane-scroll::-webkit-scrollbar-thumb {
-  background-color: #475569;
+  background-color: var(--scrollbar-thumb);
   border-radius: 2px;
 }
 
 /* Card hover glow */
 .card-glow:hover {
-  box-shadow: 0 0 10px #FFF200;
+  box-shadow: 0 0 10px var(--card-glow);
   cursor: pointer;
 }
 
@@ -74,7 +186,7 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  background-color: rgba(0, 0, 0, 0.75);
+  background-color: var(--backdrop);
   backdrop-filter: blur(2px);
 }
 

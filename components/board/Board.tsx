@@ -1,7 +1,6 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import Image from 'next/image';
 import Link from 'next/link';
 import {
   DndContext,
@@ -27,6 +26,8 @@ import CheckInModal, { CheckInData } from '@/components/modals/CheckInModal';
 import CheckInCompleteModal from '@/components/modals/CheckInCompleteModal';
 import Toast from '@/components/ui/Toast';
 import Portal from '@/components/ui/Portal';
+import NboLogo from '@/components/ui/NboLogo';
+import ThemeToggle from '@/components/ui/ThemeToggle';
 import { logout } from '@/app/login/actions';
 
 interface DispatcherAssignment {
@@ -344,33 +345,34 @@ export default function Board({ initialDrivers, initialDispatchers }: BoardProps
       onDragOver={handleDragOver}
       onDragEnd={handleDragEnd}
     >
-      <div className="flex flex-col h-screen p-3 gap-3 relative" style={{ backgroundColor: '#0D1117' }}>
+      <div className="flex flex-col h-screen p-3 gap-3 relative" style={{ backgroundColor: 'var(--surface-page)' }}>
 
         {/* Header */}
         <div
           className="flex items-center justify-between px-5 py-2 rounded-lg flex-shrink-0 border"
-          style={{ backgroundColor: '#161B22', borderColor: '#E41C23' }}
+          style={{ backgroundColor: 'var(--surface-panel)', borderColor: 'var(--brand)' }}
         >
-          <div className="flex items-center w-64">
-            <Image src="/NBO-Dark.png" alt="National Bank Open" width={180} height={65} style={{ height: 'auto' }} priority />
+          <div className="flex items-center w-72">
+            <NboLogo width={180} height={65} />
           </div>
-          <h1 className="text-xl font-bold text-white tracking-wide text-center">
+          <h1 className="text-xl font-bold text-fg-strong tracking-wide text-center">
             Transportation Dispatch{' '}
-            <span className="font-light text-slate-400">—</span>{' '}
-            <span style={{ color: '#E41C23' }}>Live Status</span>
+            <span className="font-light text-fg-muted">—</span>{' '}
+            <span style={{ color: 'var(--brand)' }}>Live Status</span>
           </h1>
-          <div className="w-64 flex items-center justify-end gap-3">
+          <div className="w-72 flex items-center justify-end gap-3">
+            <ThemeToggle />
             <Link
               href="/import"
-              className="px-3 py-1.5 rounded-lg text-xs font-bold tracking-widest uppercase text-slate-300 hover:text-white transition-colors whitespace-nowrap"
-              style={{ border: '1px solid #2D3748' }}
+              className="px-3 py-1.5 rounded-lg text-xs font-bold tracking-widest uppercase text-fg-soft hover:text-fg-strong transition-colors whitespace-nowrap"
+              style={{ border: '1px solid var(--edge)' }}
             >
               Import
             </Link>
             <button
               onClick={() => setShowCheckIn(true)}
               className="px-4 py-1.5 rounded-lg text-xs font-black tracking-widest uppercase text-white transition-opacity hover:opacity-80 whitespace-nowrap"
-              style={{ backgroundColor: '#E41C23', border: '1px solid #E41C23' }}
+              style={{ backgroundColor: 'var(--brand)', border: '1px solid var(--brand)' }}
             >
               + Check In
             </button>
@@ -400,18 +402,18 @@ export default function Board({ initialDrivers, initialDispatchers }: BoardProps
           <form action={logout} className="pointer-events-auto">
             <button
               type="submit"
-              className="text-[10px] font-bold uppercase tracking-widest text-slate-600 hover:text-slate-400 transition-colors"
+              className="text-[10px] font-bold uppercase tracking-widest text-fg-ghost hover:text-fg-muted transition-colors"
             >
               Sign Out
             </button>
           </form>
-          <p className="text-[10px] text-slate-600 tracking-wide">
+          <p className="text-[10px] text-fg-ghost tracking-wide">
             Designed &amp; built by{' '}
             <a
               href="https://www.linkedin.com/in/hasankanjee"
               target="_blank"
               rel="noopener noreferrer"
-              className="text-slate-500 hover:text-slate-300 transition-colors underline underline-offset-2 pointer-events-auto"
+              className="text-fg-faint hover:text-fg-soft transition-colors underline underline-offset-2 pointer-events-auto"
             >
               Hasan Kanjee
             </a>

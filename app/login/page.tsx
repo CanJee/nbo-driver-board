@@ -1,4 +1,5 @@
-import Image from 'next/image';
+import NboLogo from '@/components/ui/NboLogo';
+import ThemeToggle from '@/components/ui/ThemeToggle';
 import LoginForm from './LoginForm';
 
 export default async function LoginPage({
@@ -12,28 +13,24 @@ export default async function LoginPage({
   return (
     <div
       className="min-h-screen flex items-center justify-center"
-      style={{ backgroundColor: '#0D1117' }}
+      style={{ backgroundColor: 'var(--surface-page)' }}
     >
+      <div className="fixed top-4 right-4">
+        <ThemeToggle />
+      </div>
       <div className="w-full max-w-sm px-4">
         <div className="flex justify-center mb-8">
-          <Image
-            src="/NBO-Dark.png"
-            alt="National Bank Open"
-            width={200}
-            height={73}
-            style={{ height: 'auto' }}
-            priority
-          />
+          <NboLogo width={200} height={73} />
         </div>
 
         <div
           className="rounded-xl p-8"
-          style={{ backgroundColor: '#161B22', border: '1px solid #2D3748' }}
+          style={{ backgroundColor: 'var(--surface-panel)', border: '1px solid var(--edge)' }}
         >
-          <h1 className="text-lg font-bold text-white mb-1 text-center">
+          <h1 className="text-lg font-bold text-fg-strong mb-1 text-center">
             Transportation Dispatch
           </h1>
-          <p className="text-sm text-slate-400 mb-6 text-center">
+          <p className="text-sm text-fg-muted mb-6 text-center">
             Enter your access code to continue
           </p>
 

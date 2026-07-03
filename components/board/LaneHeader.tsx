@@ -13,17 +13,17 @@ export default function LaneHeader({ laneId, count, dispatcher }: LaneHeaderProp
     <div
       className="flex items-center justify-between px-3 py-2 border-b min-h-[44px] flex-shrink-0"
       style={{
-        backgroundColor: '#1C0A0A',
-        borderBottomColor: '#E41C23',
+        backgroundColor: 'var(--surface-lane-header)',
+        borderBottomColor: 'var(--brand)',
         borderBottomWidth: '2px',
       }}
     >
       <div className="flex flex-col min-w-0">
-        <span className="text-[11px] font-bold tracking-widest uppercase truncate text-white">
+        <span className="text-[11px] font-bold tracking-widest uppercase truncate text-fg-strong">
           {label}
         </span>
         {dispatcher && (
-          <span className="text-[9px] text-slate-400 mt-0.5 truncate">
+          <span className="text-[9px] text-fg-muted mt-0.5 truncate">
             {dispatcher}
           </span>
         )}
@@ -32,7 +32,7 @@ export default function LaneHeader({ laneId, count, dispatcher }: LaneHeaderProp
       {/* Driver count badge */}
       <span
         className="ml-2 flex-shrink-0 text-white text-[11px] font-bold rounded-full w-6 h-6 flex items-center justify-center"
-        style={{ backgroundColor: count > 0 ? '#E41C23' : '#374151' }}
+        style={{ backgroundColor: count > 0 ? 'var(--brand)' : 'var(--surface-badge-muted)' }}
       >
         {count}
       </span>

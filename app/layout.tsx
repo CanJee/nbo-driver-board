@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import ThemeProvider from "@/components/ui/ThemeProvider";
 
 export const metadata: Metadata = {
   title: "NBO Transportation Dispatch",
@@ -12,9 +13,14 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className="h-full">
-      <body className="h-full bg-[#0F172A] text-slate-100 antialiased">
-        {children}
+    // suppressHydrationWarning: next-themes mutates the html class before hydration
+    <html lang="en" className="h-full" suppressHydrationWarning>
+      <body className="h-full bg-page text-fg antialiased">
+        {/* defaultTheme="dark" keeps the board's original look until a user
+            explicitly toggles — no surprise theme flips on venue displays. */}
+        <ThemeProvider attribute="class" defaultTheme="dark" enableSystem={false} disableTransitionOnChange>
+          {children}
+        </ThemeProvider>
       </body>
     </html>
   );

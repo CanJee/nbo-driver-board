@@ -234,19 +234,19 @@ export default function CheckInModal({ onConfirm, onCancel }: CheckInModalProps)
     <div className="modal-backdrop" onClick={onCancel}>
       <div
         className="rounded-2xl shadow-2xl w-[480px] max-h-[90vh] overflow-y-auto"
-        style={{ backgroundColor: '#0D1117', border: '1px solid #E41C23' }}
+        style={{ backgroundColor: 'var(--surface-page)', border: '1px solid var(--brand)' }}
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
         <div
           className="flex items-center justify-between px-6 py-4 rounded-t-2xl"
-          style={{ backgroundColor: '#161B22', borderBottom: '2px solid #E41C23' }}
+          style={{ backgroundColor: 'var(--surface-panel)', borderBottom: '2px solid var(--brand)' }}
         >
           <div>
-            <h2 className="text-xl font-black text-white tracking-wide uppercase">Driver Check-In</h2>
-            <p className="text-xs text-slate-400 mt-0.5">{formatRosterDate(today)}</p>
+            <h2 className="text-xl font-black text-fg-strong tracking-wide uppercase">Driver Check-In</h2>
+            <p className="text-xs text-fg-muted mt-0.5">{formatRosterDate(today)}</p>
           </div>
-          <button onClick={onCancel} className="text-slate-500 hover:text-white transition-colors">
+          <button onClick={onCancel} className="text-fg-faint hover:text-fg-strong transition-colors">
             <X size={20} />
           </button>
         </div>
@@ -255,16 +255,16 @@ export default function CheckInModal({ onConfirm, onCancel }: CheckInModalProps)
 
           {/* Error banner */}
           {error && (
-            <div className="text-sm text-white rounded-lg px-4 py-2.5"
-              style={{ backgroundColor: '#7F1D1D', border: '1px solid #E41C23' }}>
+            <div className="text-sm text-(--status-error-fg) rounded-lg px-4 py-2.5"
+              style={{ backgroundColor: 'var(--status-error-bg)', border: '1px solid var(--brand)' }}>
               {error}
             </div>
           )}
 
           {/* No-roster hint */}
           {noRosterToday && (
-            <div className="text-xs text-amber-300 rounded-lg px-4 py-2.5"
-              style={{ backgroundColor: '#3F2D0A', border: '1px solid #B45309' }}>
+            <div className="text-xs text-amber-700 dark:text-amber-300 rounded-lg px-4 py-2.5"
+              style={{ backgroundColor: 'var(--status-warn-bg)', border: '1px solid #B45309' }}>
               No roster imported for {formatRosterDate(today)}.{' '}
               <a href="/import" className="underline font-semibold">Import today&apos;s roster</a>{' '}
               or enter a driver manually below.
@@ -275,21 +275,21 @@ export default function CheckInModal({ onConfirm, onCancel }: CheckInModalProps)
           <div>
             <div className="flex items-center justify-between mb-2">
               <label className="block text-[11px] font-bold tracking-widest uppercase"
-                style={{ color: '#E41C23' }}>
+                style={{ color: 'var(--brand)' }}>
                 1 · Select Driver
               </label>
-              <label className="flex items-center gap-1.5 text-[10px] text-slate-400 cursor-pointer select-none">
+              <label className="flex items-center gap-1.5 text-[10px] text-fg-muted cursor-pointer select-none">
                 <input
                   type="checkbox"
                   checked={showAllRoles}
                   onChange={(e) => setShowAllRoles(e.target.checked)}
-                  className="accent-[#E41C23]"
+                  className="accent-brand"
                 />
                 Show all roles
               </label>
             </div>
             <div className="relative">
-              <div className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500">
+              <div className="absolute left-3 top-1/2 -translate-y-1/2 text-fg-faint">
                 <Search size={15} />
               </div>
               <input
@@ -299,19 +299,19 @@ export default function CheckInModal({ onConfirm, onCancel }: CheckInModalProps)
                 onChange={(e) => { setQuery(e.target.value); setSelected(null); setDrafts([]); setShowDropdown(true); }}
                 onFocus={() => setShowDropdown(true)}
                 placeholder="Search by name..."
-                className="w-full pl-9 pr-9 py-2.5 rounded-lg text-sm text-white placeholder-slate-600 outline-none"
-                style={{ backgroundColor: '#161B22', border: '1px solid #2D3748' }}
+                className="w-full pl-9 pr-9 py-2.5 rounded-lg text-sm text-fg-strong placeholder-fg-ghost outline-none"
+                style={{ backgroundColor: 'var(--surface-panel)', border: '1px solid var(--edge)' }}
               />
               {query && (
                 <button type="button" onClick={handleClear}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-white">
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-fg-faint hover:text-fg-strong">
                   <X size={14} />
                 </button>
               )}
               {/* Dropdown */}
               {showDropdown && filtered.length > 0 && (
                 <div className="absolute z-10 mt-1 w-full rounded-lg shadow-xl overflow-hidden max-h-64 overflow-y-auto"
-                  style={{ backgroundColor: '#161B22', border: '1px solid #2D3748' }}>
+                  style={{ backgroundColor: 'var(--surface-panel)', border: '1px solid var(--edge)' }}>
                   {filtered.map((g) => {
                     const periods = sortDrafts(g.entries.map(entryToDraft));
                     return (
@@ -319,10 +319,10 @@ export default function CheckInModal({ onConfirm, onCancel }: CheckInModalProps)
                         key={g.key}
                         type="button"
                         onClick={() => handleSelect(g)}
-                        className="w-full text-left px-4 py-2.5 hover:bg-slate-700 transition-colors"
+                        className="w-full text-left px-4 py-2.5 hover:bg-black/5 dark:hover:bg-white/10 transition-colors"
                       >
                         <div className="flex items-center justify-between">
-                          <div className="text-sm font-semibold text-white">{g.name}</div>
+                          <div className="text-sm font-semibold text-fg-strong">{g.name}</div>
                           <div className="flex items-center gap-1">
                             {periods.map((d) => (
                               <span key={d.key}
@@ -333,7 +333,7 @@ export default function CheckInModal({ onConfirm, onCancel }: CheckInModalProps)
                             ))}
                           </div>
                         </div>
-                        <div className="text-[10px] text-slate-400 mt-0.5">
+                        <div className="text-[10px] text-fg-muted mt-0.5">
                           {g.roles.join(', ') || '—'} · {periods.map((d) => SHIFT_LABELS[d.shift_type]).join(' + ')}
                         </div>
                       </button>
@@ -343,13 +343,13 @@ export default function CheckInModal({ onConfirm, onCancel }: CheckInModalProps)
               )}
             </div>
             {selected && (
-              <p className="text-[10px] text-slate-500 mt-1.5 ml-1">
+              <p className="text-[10px] text-fg-faint mt-1.5 ml-1">
                 ✓ On today&apos;s roster · {selected.roles.join(', ')}
                 {selected.phone ? ` · ${selected.phone}` : ''}
               </p>
             )}
             {!selected && query.trim() && (
-              <p className="text-[10px] text-amber-400 mt-1.5 ml-1">
+              <p className="text-[10px] text-amber-700 dark:text-amber-400 mt-1.5 ml-1">
                 Not on today&apos;s roster — add a shift below to check in manually.
               </p>
             )}
@@ -358,7 +358,7 @@ export default function CheckInModal({ onConfirm, onCancel }: CheckInModalProps)
           {/* ── STEP 2: Shifts ── */}
           <div>
             <label className="block text-[11px] font-bold tracking-widest uppercase mb-2"
-              style={{ color: '#E41C23' }}>
+              style={{ color: 'var(--brand)' }}>
               2 · Confirm Shifts
             </label>
 
@@ -369,31 +369,31 @@ export default function CheckInModal({ onConfirm, onCancel }: CheckInModalProps)
                   <div
                     key={d.key}
                     className="flex items-center gap-2 rounded-lg px-3 py-2"
-                    style={{ backgroundColor: '#161B22', border: `1px solid ${SHIFT_COLORS[d.shift_type]}` }}
+                    style={{ backgroundColor: 'var(--surface-panel)', border: `1px solid ${SHIFT_COLORS[d.shift_type]}` }}
                   >
                     <span className="w-2.5 h-2.5 rounded-sm flex-shrink-0"
                       style={{ backgroundColor: SHIFT_COLORS[d.shift_type] }} />
-                    <span className="text-sm font-semibold text-white">{SHIFT_LABELS[d.shift_type]}</span>
-                    {d.label && <span className="text-xs text-slate-300">{d.label}</span>}
-                    {d.source_location && <span className="text-[10px] text-slate-500 truncate">· {d.source_location}</span>}
+                    <span className="text-sm font-semibold text-fg-strong">{SHIFT_LABELS[d.shift_type]}</span>
+                    {d.label && <span className="text-xs text-fg-soft">{d.label}</span>}
+                    {d.source_location && <span className="text-[10px] text-fg-faint truncate">· {d.source_location}</span>}
                     {!d.scheduled && (
-                      <span className="text-[9px] font-bold uppercase tracking-wide text-amber-400 px-1.5 py-0.5 rounded"
-                        style={{ backgroundColor: '#3F2D0A' }}>manual</span>
+                      <span className="text-[9px] font-bold uppercase tracking-wide text-amber-800 dark:text-amber-400 px-1.5 py-0.5 rounded"
+                        style={{ backgroundColor: 'var(--status-warn-bg)' }}>manual</span>
                     )}
                     <button type="button" onClick={() => removeDraft(d.key)}
-                      className="ml-auto text-slate-500 hover:text-white flex-shrink-0">
+                      className="ml-auto text-fg-faint hover:text-fg-strong flex-shrink-0">
                       <X size={14} />
                     </button>
                   </div>
                 ))}
               </div>
             ) : (
-              <p className="text-xs text-slate-500 italic mb-3">No shifts selected yet — add one below.</p>
+              <p className="text-xs text-fg-faint italic mb-3">No shifts selected yet — add one below.</p>
             )}
 
             {/* Manual add / override */}
-            <div className="rounded-lg p-3" style={{ backgroundColor: '#0B0F14', border: '1px dashed #2D3748' }}>
-              <div className="text-[10px] text-slate-500 uppercase tracking-wider mb-2">Add / override shift</div>
+            <div className="rounded-lg p-3" style={{ backgroundColor: 'var(--surface-inset)', border: '1px dashed var(--edge)' }}>
+              <div className="text-[10px] text-fg-faint uppercase tracking-wider mb-2">Add / override shift</div>
               <div className="grid grid-cols-3 gap-2 mb-2">
                 {SHIFT_TYPES.map((s) => (
                   <button
@@ -402,9 +402,9 @@ export default function CheckInModal({ onConfirm, onCancel }: CheckInModalProps)
                     onClick={() => setManualPeriod(s)}
                     className="py-2 rounded-lg text-xs font-bold transition-all"
                     style={{
-                      backgroundColor: manualPeriod === s ? SHIFT_COLORS[s] : '#161B22',
-                      border: `1px solid ${manualPeriod === s ? SHIFT_COLORS[s] : '#2D3748'}`,
-                      color: manualPeriod === s ? '#fff' : '#94A3B8',
+                      backgroundColor: manualPeriod === s ? SHIFT_COLORS[s] : 'var(--surface-panel)',
+                      border: `1px solid ${manualPeriod === s ? SHIFT_COLORS[s] : 'var(--edge)'}`,
+                      color: manualPeriod === s ? '#fff' : 'var(--fg-muted)',
                     }}
                   >
                     {SHIFT_LABELS[s]}
@@ -417,14 +417,14 @@ export default function CheckInModal({ onConfirm, onCancel }: CheckInModalProps)
                   value={manualTime}
                   onChange={(e) => setManualTime(e.target.value)}
                   placeholder="Time (optional, e.g. 7am–3pm)"
-                  className="flex-1 px-3 py-2 rounded-lg text-sm text-white placeholder-slate-600 outline-none"
-                  style={{ backgroundColor: '#161B22', border: '1px solid #2D3748' }}
+                  className="flex-1 px-3 py-2 rounded-lg text-sm text-fg-strong placeholder-fg-ghost outline-none"
+                  style={{ backgroundColor: 'var(--surface-panel)', border: '1px solid var(--edge)' }}
                 />
                 <button
                   type="button"
                   onClick={addManualShift}
-                  className="flex items-center gap-1 px-3 py-2 rounded-lg text-xs font-bold text-white flex-shrink-0"
-                  style={{ backgroundColor: '#2D3748' }}
+                  className="flex items-center gap-1 px-3 py-2 rounded-lg text-xs font-bold text-fg-strong flex-shrink-0"
+                  style={{ backgroundColor: 'var(--surface-button)' }}
                 >
                   <Plus size={14} /> Add
                 </button>
@@ -435,7 +435,7 @@ export default function CheckInModal({ onConfirm, onCancel }: CheckInModalProps)
           {/* ── STEP 3: Starting Lane ── */}
           <div>
             <label className="block text-[11px] font-bold tracking-widest uppercase mb-2"
-              style={{ color: '#E41C23' }}>
+              style={{ color: 'var(--brand)' }}>
               3 · Starting Lane
             </label>
             <div className="grid grid-cols-3 gap-2">
@@ -446,9 +446,9 @@ export default function CheckInModal({ onConfirm, onCancel }: CheckInModalProps)
                   onClick={() => setLane(l)}
                   className="py-2 px-3 rounded-lg text-xs font-bold transition-all text-center"
                   style={{
-                    backgroundColor: lane === l ? '#E41C23' : '#161B22',
-                    border: `1px solid ${lane === l ? '#E41C23' : '#2D3748'}`,
-                    color: lane === l ? '#fff' : '#94A3B8',
+                    backgroundColor: lane === l ? 'var(--brand)' : 'var(--surface-panel)',
+                    border: `1px solid ${lane === l ? 'var(--brand)' : 'var(--edge)'}`,
+                    color: lane === l ? '#fff' : 'var(--fg-muted)',
                   }}
                 >
                   {LANE_LABELS[l]}
@@ -460,16 +460,16 @@ export default function CheckInModal({ onConfirm, onCancel }: CheckInModalProps)
           {/* ── STEP 4: Equipment (optional) ── */}
           <div>
             <label className="block text-[11px] font-bold tracking-widest uppercase mb-2"
-              style={{ color: '#E41C23' }}>
-              4 · Equipment <span className="text-slate-500 normal-case font-normal tracking-normal">(optional — can assign later)</span>
+              style={{ color: 'var(--brand)' }}>
+              4 · Equipment <span className="text-fg-faint normal-case font-normal tracking-normal">(optional — can assign later)</span>
             </label>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="text-[10px] text-slate-500 uppercase tracking-wider block mb-1">Walkie #</label>
+                <label className="text-[10px] text-fg-faint uppercase tracking-wider block mb-1">Walkie #</label>
                 <EquipmentInput prefix="W-" value={walkieDigits} onChange={setWalkieDigits} />
               </div>
               <div>
-                <label className="text-[10px] text-slate-500 uppercase tracking-wider block mb-1">Car #</label>
+                <label className="text-[10px] text-fg-faint uppercase tracking-wider block mb-1">Car #</label>
                 <EquipmentInput prefix="C-" value={carDigits} onChange={setCarDigits} />
               </div>
             </div>
@@ -479,7 +479,7 @@ export default function CheckInModal({ onConfirm, onCancel }: CheckInModalProps)
           <button
             type="submit"
             className="w-full py-3 rounded-xl font-black text-sm tracking-widest uppercase text-white transition-opacity hover:opacity-90"
-            style={{ backgroundColor: '#E41C23' }}
+            style={{ backgroundColor: 'var(--brand)' }}
           >
             Complete Check-In
           </button>
