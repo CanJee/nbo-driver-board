@@ -9,6 +9,8 @@ export type AwayReason = 'gas' | 'carwash' | 'practice' | 'parking';
 export type LaneId =
   | 'tennis_centre'
   | 'uptown_hotel'
+  // Retained as a valid lane for legacy data and a future re-add, but NOT shown for
+  // 2026 (no downtown hotel this year) — intentionally left out of MAIN_LANES below.
   | 'downtown_hotel'
   | 'airport'
   | 'other'
@@ -104,10 +106,11 @@ export const AWAY_LABELS: Record<AwayReason, string> = {
   parking: 'Parking Lot Shuttle',
 };
 
+// Board columns + check-in lane options (with `meals` appended in the UI).
+// `downtown_hotel` is intentionally omitted for 2026 — re-add it here to restore the column.
 export const MAIN_LANES: LaneId[] = [
   'tennis_centre',
   'uptown_hotel',
-  'downtown_hotel',
   'airport',
   'other',
 ];
