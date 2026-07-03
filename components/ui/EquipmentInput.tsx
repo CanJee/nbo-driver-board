@@ -19,14 +19,14 @@ const EquipmentInput = forwardRef<HTMLInputElement, EquipmentInputProps>(
     return (
       <div
         className="flex rounded-lg overflow-hidden"
-        style={{ border: '1px solid #2D3748', backgroundColor: '#0D1117' }}
+        style={{ border: '1px solid var(--edge)', backgroundColor: 'var(--surface-input)' }}
       >
         <span
           className="px-3 py-2 text-sm font-bold flex items-center select-none flex-shrink-0"
           style={{
-            color: '#94A3B8',
-            backgroundColor: '#161B22',
-            borderRight: '1px solid #2D3748',
+            color: 'var(--fg-muted)',
+            backgroundColor: 'var(--surface-chip)',
+            borderRight: '1px solid var(--edge)',
           }}
         >
           {prefix}
@@ -44,7 +44,7 @@ const EquipmentInput = forwardRef<HTMLInputElement, EquipmentInputProps>(
             onChange(digits);
           }}
           placeholder="00"
-          className="flex-1 px-3 py-2 text-sm text-white placeholder-slate-600 outline-none bg-transparent min-w-0"
+          className="flex-1 px-3 py-2 text-sm text-fg-strong placeholder-fg-ghost outline-none bg-transparent min-w-0"
         />
       </div>
     );

@@ -59,19 +59,19 @@ export default function AssignModal({ driver, activeDrivers, onConfirm, onCancel
     <div className="modal-backdrop" onClick={onCancel}>
       <div
         className="rounded-xl p-6 w-80 shadow-2xl"
-        style={{ backgroundColor: '#161B22', border: '1px solid #3B82F6' }}
+        style={{ backgroundColor: 'var(--surface-panel)', border: '1px solid #3B82F6' }}
         onClick={(e) => e.stopPropagation()}
       >
-        <h2 className="text-white font-bold text-lg mb-1">Assign Equipment</h2>
-        <p className="text-slate-400 text-sm mb-4">
+        <h2 className="text-fg-strong font-bold text-lg mb-1">Assign Equipment</h2>
+        <p className="text-fg-muted text-sm mb-4">
           Walkie and car numbers for{' '}
-          <span className="text-white font-semibold">{driver.name}</span>.
+          <span className="text-fg-strong font-semibold">{driver.name}</span>.
         </p>
 
         {error && (
           <div
-            className="text-sm text-white rounded-lg px-3 py-2 mb-3"
-            style={{ backgroundColor: '#7F1D1D', border: '1px solid #E41C23' }}
+            className="text-sm text-(--status-error-fg) rounded-lg px-3 py-2 mb-3"
+            style={{ backgroundColor: 'var(--status-error-bg)', border: '1px solid var(--brand)' }}
           >
             {error}
           </div>
@@ -79,7 +79,7 @@ export default function AssignModal({ driver, activeDrivers, onConfirm, onCancel
 
         <form onSubmit={handleSubmit} className="space-y-3">
           <div>
-            <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 block mb-1">
+            <label className="text-[10px] font-bold uppercase tracking-widest text-fg-muted block mb-1">
               Walkie Number
             </label>
             <EquipmentInput
@@ -91,7 +91,7 @@ export default function AssignModal({ driver, activeDrivers, onConfirm, onCancel
           </div>
 
           <div>
-            <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 block mb-1">
+            <label className="text-[10px] font-bold uppercase tracking-widest text-fg-muted block mb-1">
               Car Number
             </label>
             <EquipmentInput
@@ -105,8 +105,8 @@ export default function AssignModal({ driver, activeDrivers, onConfirm, onCancel
             <button
               type="button"
               onClick={onCancel}
-              className="flex-1 py-2 rounded-lg text-sm font-bold text-slate-300 hover:text-white transition-colors"
-              style={{ backgroundColor: '#2D3748' }}
+              className="flex-1 py-2 rounded-lg text-sm font-bold text-fg-soft hover:text-fg-strong transition-colors"
+              style={{ backgroundColor: 'var(--surface-button)' }}
             >
               Cancel
             </button>

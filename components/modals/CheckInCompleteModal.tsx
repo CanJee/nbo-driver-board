@@ -33,22 +33,22 @@ export default function CheckInCompleteModal({
     <div className="modal-backdrop" onClick={onDone}>
       <div
         className="rounded-2xl shadow-2xl w-[400px] overflow-hidden"
-        style={{ backgroundColor: '#0D1117', border: '1px solid #16A34A' }}
+        style={{ backgroundColor: 'var(--surface-page)', border: '1px solid var(--status-success)' }}
         onClick={(e) => e.stopPropagation()}
       >
         {/* Green success header */}
         <div
           className="flex flex-col items-center justify-center px-6 py-8"
-          style={{ backgroundColor: '#052E16' }}
+          style={{ backgroundColor: 'var(--status-success-bg)' }}
         >
-          <CheckCircle size={56} color="#16A34A" strokeWidth={1.5} className="mb-4" />
+          <CheckCircle size={56} color="var(--status-success)" strokeWidth={1.5} className="mb-4" />
           <p
             className="text-xs font-black tracking-[0.2em] uppercase mb-2"
-            style={{ color: '#16A34A' }}
+            style={{ color: 'var(--status-success)' }}
           >
             Check-In Complete
           </p>
-          <h2 className="text-2xl font-black text-white tracking-wide text-center">
+          <h2 className="text-2xl font-black text-(--status-success-fg) tracking-wide text-center">
             {name}
           </h2>
         </div>
@@ -56,10 +56,10 @@ export default function CheckInCompleteModal({
         {/* Details */}
         <div
           className="px-6 py-5 space-y-3"
-          style={{ borderTop: '1px solid #16A34A' }}
+          style={{ borderTop: '1px solid var(--status-success)' }}
         >
           <div className="flex items-start justify-between">
-            <span className="text-[11px] font-bold tracking-widest uppercase text-slate-500 mt-1">
+            <span className="text-[11px] font-bold tracking-widest uppercase text-fg-faint mt-1">
               {shifts.length > 1 ? 'Shifts' : 'Shift'}
             </span>
             <div className="flex flex-wrap gap-1.5 justify-end">
@@ -75,10 +75,10 @@ export default function CheckInCompleteModal({
             </div>
           </div>
           <div className="flex items-center justify-between">
-            <span className="text-[11px] font-bold tracking-widest uppercase text-slate-500">
+            <span className="text-[11px] font-bold tracking-widest uppercase text-fg-faint">
               Starting Lane
             </span>
-            <span className="text-sm font-semibold text-white">
+            <span className="text-sm font-semibold text-fg-strong">
               {LANE_LABELS[lane]}
             </span>
           </div>
@@ -89,11 +89,11 @@ export default function CheckInCompleteModal({
           <button
             onClick={onDone}
             className="w-full py-3 rounded-xl font-black text-sm tracking-widest uppercase text-white transition-opacity hover:opacity-90"
-            style={{ backgroundColor: '#16A34A' }}
+            style={{ backgroundColor: 'var(--status-success)' }}
           >
             Done
           </button>
-          <p className="text-center text-[10px] text-slate-600 mt-2">
+          <p className="text-center text-[10px] text-fg-ghost mt-2">
             Auto-closes in {AUTO_CLOSE_MS / 1000} seconds
           </p>
         </div>

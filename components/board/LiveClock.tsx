@@ -26,7 +26,7 @@ export default function LiveClock() {
   return (
     <span
       className="text-2xl font-bold tabular-nums tracking-wider"
-      style={{ color: '#E41C23' }}
+      style={{ color: 'var(--brand)' }}
     >
       {time}
     </span>

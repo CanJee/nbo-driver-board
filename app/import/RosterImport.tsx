@@ -4,6 +4,7 @@ import { useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { ArrowLeft, Upload, AlertTriangle, CheckCircle, FileText } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
+import ThemeToggle from '@/components/ui/ThemeToggle';
 import { LANE_LABELS, SHIFT_COLORS, SHIFT_LABELS } from '@/lib/types';
 import { getTournamentDate, formatRosterDate } from '@/lib/date';
 import { RosterParseResult, parseRosterCsv, parseRosterMatrix } from '@/lib/roster/parse';
@@ -148,29 +149,32 @@ export default function RosterImport() {
   };
 
   return (
-    <div className="min-h-screen p-6" style={{ backgroundColor: '#0D1117' }}>
+    <div className="min-h-screen p-6" style={{ backgroundColor: 'var(--surface-page)' }}>
       <div className="max-w-4xl mx-auto">
         {/* Header */}
         <div className="flex items-center justify-between mb-6">
           <div>
-            <h1 className="text-2xl font-black text-white tracking-wide uppercase">Import Roster</h1>
-            <p className="text-sm text-slate-400 mt-1">
+            <h1 className="text-2xl font-black text-fg-strong tracking-wide uppercase">Import Roster</h1>
+            <p className="text-sm text-fg-muted mt-1">
               Upload the daily ShiftCrew export (CSV or Excel) to set the schedule.
             </p>
           </div>
-          <Link
-            href="/"
-            className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-widest text-slate-400 hover:text-white transition-colors"
-          >
-            <ArrowLeft size={14} /> Board
-          </Link>
+          <div className="flex items-center gap-3">
+            <ThemeToggle />
+            <Link
+              href="/"
+              className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-widest text-fg-muted hover:text-fg-strong transition-colors"
+            >
+              <ArrowLeft size={14} /> Board
+            </Link>
+          </div>
         </div>
 
         {/* Upload + date */}
-        <div className="rounded-xl p-5 mb-5" style={{ backgroundColor: '#161B22', border: '1px solid #2D3748' }}>
+        <div className="rounded-xl p-5 mb-5" style={{ backgroundColor: 'var(--surface-panel)', border: '1px solid var(--edge)' }}>
           <div className="grid grid-cols-[1fr_auto] gap-4 items-end">
             <div>
-              <label className="block text-[11px] font-bold tracking-widest uppercase mb-2" style={{ color: '#E41C23' }}>
+              <label className="block text-[11px] font-bold tracking-widest uppercase mb-2" style={{ color: 'var(--brand)' }}>
                 1 · Roster file
               </label>
               <input
@@ -183,23 +187,23 @@ export default function RosterImport() {
               <button
                 type="button"
                 onClick={() => fileRef.current?.click()}
-                className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-bold text-white transition-opacity hover:opacity-90"
-                style={{ backgroundColor: '#2D3748' }}
+                className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-bold text-fg-strong transition-opacity hover:opacity-90"
+                style={{ backgroundColor: 'var(--surface-button)' }}
               >
                 <Upload size={15} /> {fileName || 'Choose CSV / Excel file'}
               </button>
             </div>
             {!allRowsHaveDate && (
               <div>
-                <label className="block text-[11px] font-bold tracking-widest uppercase mb-2" style={{ color: '#E41C23' }}>
+                <label className="block text-[11px] font-bold tracking-widest uppercase mb-2" style={{ color: 'var(--brand)' }}>
                   2 · Roster date
                 </label>
                 <input
                   type="date"
                   value={date}
                   onChange={(e) => setDate(e.target.value)}
-                  className="px-3 py-2.5 rounded-lg text-sm text-white outline-none"
-                  style={{ backgroundColor: '#0D1117', border: '1px solid #2D3748', colorScheme: 'dark' }}
+                  className="px-3 py-2.5 rounded-lg text-sm text-fg-strong outline-none"
+                  style={{ backgroundColor: 'var(--surface-input)', border: '1px solid var(--edge)' }}
                 />
               </div>
             )}
@@ -208,7 +212,7 @@ export default function RosterImport() {
           {/* Worksheet selector (multi-sheet workbooks) */}
           {sheets.length > 1 && (
             <div className="mt-4">
-              <label className="block text-[10px] text-slate-500 uppercase tracking-wider mb-1.5">Worksheet</label>
+              <label className="block text-[10px] text-fg-faint uppercase tracking-wider mb-1.5">Worksheet</label>
               <div className="flex flex-wrap gap-2">
                 {sheets.map((s, i) => (
                   <button
@@ -217,9 +221,9 @@ export default function RosterImport() {
                     onClick={() => selectSheet(i)}
                     className="px-3 py-1.5 rounded-lg text-xs font-bold transition-all"
                     style={{
-                      backgroundColor: selectedSheet === i ? '#E41C23' : '#0D1117',
-                      border: `1px solid ${selectedSheet === i ? '#E41C23' : '#2D3748'}`,
-                      color: selectedSheet === i ? '#fff' : '#94A3B8',
+                      backgroundColor: selectedSheet === i ? 'var(--brand)' : 'var(--surface-page)',
+                      border: `1px solid ${selectedSheet === i ? 'var(--brand)' : 'var(--edge)'}`,
+                      color: selectedSheet === i ? '#fff' : 'var(--fg-muted)',
                     }}
                   >
                     {s.name}
@@ -230,7 +234,7 @@ export default function RosterImport() {
           )}
 
           {result && distinctDates.length > 0 && (
-            <p className="text-[11px] text-slate-500 mt-3">
+            <p className="text-[11px] text-fg-faint mt-3">
               {allRowsHaveDate ? 'Dates in file: ' : 'Importing for: '}
               {distinctDates.map(formatRosterDate).join('  ·  ')}
             </p>
@@ -238,16 +242,16 @@ export default function RosterImport() {
         </div>
 
         {parseError && (
-          <div className="text-sm text-white rounded-lg px-4 py-3 mb-5 flex items-center gap-2"
-            style={{ backgroundColor: '#7F1D1D', border: '1px solid #E41C23' }}>
+          <div className="text-sm text-(--status-error-fg) rounded-lg px-4 py-3 mb-5 flex items-center gap-2"
+            style={{ backgroundColor: 'var(--status-error-bg)', border: '1px solid var(--brand)' }}>
             <AlertTriangle size={16} /> {parseError}
           </div>
         )}
 
         {done && (
-          <div className="text-sm text-white rounded-lg px-4 py-3 mb-5 flex items-center gap-2"
-            style={{ backgroundColor: '#052E16', border: '1px solid #16A34A' }}>
-            <CheckCircle size={16} color="#16A34A" /> {done}{' '}
+          <div className="text-sm text-(--status-success-fg) rounded-lg px-4 py-3 mb-5 flex items-center gap-2"
+            style={{ backgroundColor: 'var(--status-success-bg)', border: '1px solid var(--status-success)' }}>
+            <CheckCircle size={16} color="var(--status-success)" /> {done}{' '}
             <Link href="/" className="underline font-semibold ml-1">Go to board</Link>
           </div>
         )}
@@ -258,17 +262,17 @@ export default function RosterImport() {
             {/* Summary */}
             {summary && (
               <div className="flex flex-wrap gap-3 mb-4 text-xs">
-                <span className="px-3 py-1.5 rounded-lg text-slate-300" style={{ backgroundColor: '#161B22', border: '1px solid #2D3748' }}>
-                  <span className="font-bold text-white">{result.rows.length}</span> assignments
+                <span className="px-3 py-1.5 rounded-lg text-fg-soft" style={{ backgroundColor: 'var(--surface-panel)', border: '1px solid var(--edge)' }}>
+                  <span className="font-bold text-fg-strong">{result.rows.length}</span> assignments
                 </span>
-                <span className="px-3 py-1.5 rounded-lg text-slate-300" style={{ backgroundColor: '#161B22', border: '1px solid #2D3748' }}>
-                  <span className="font-bold text-white">{summary.people}</span> people · {summary.drivers} fleet drivers
+                <span className="px-3 py-1.5 rounded-lg text-fg-soft" style={{ backgroundColor: 'var(--surface-panel)', border: '1px solid var(--edge)' }}>
+                  <span className="font-bold text-fg-strong">{summary.people}</span> people · {summary.drivers} fleet drivers
                 </span>
                 {(['morning', 'afternoon', 'evening'] as const).map((p) => (
-                  <span key={p} className="px-3 py-1.5 rounded-lg text-slate-300 flex items-center gap-1.5"
-                    style={{ backgroundColor: '#161B22', border: '1px solid #2D3748' }}>
+                  <span key={p} className="px-3 py-1.5 rounded-lg text-fg-soft flex items-center gap-1.5"
+                    style={{ backgroundColor: 'var(--surface-panel)', border: '1px solid var(--edge)' }}>
                     <span className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: SHIFT_COLORS[p] }} />
-                    {SHIFT_LABELS[p]}: <span className="font-bold text-white">{summary.byPeriod[p]}</span>
+                    {SHIFT_LABELS[p]}: <span className="font-bold text-fg-strong">{summary.byPeriod[p]}</span>
                   </span>
                 ))}
               </div>
@@ -276,11 +280,11 @@ export default function RosterImport() {
 
             {/* Warnings */}
             {result.warnings.length > 0 && (
-              <div className="rounded-lg p-4 mb-4" style={{ backgroundColor: '#3F2D0A', border: '1px solid #B45309' }}>
-                <div className="flex items-center gap-2 text-amber-300 font-bold text-xs uppercase tracking-wider mb-2">
+              <div className="rounded-lg p-4 mb-4" style={{ backgroundColor: 'var(--status-warn-bg)', border: '1px solid #B45309' }}>
+                <div className="flex items-center gap-2 text-amber-700 dark:text-amber-300 font-bold text-xs uppercase tracking-wider mb-2">
                   <AlertTriangle size={14} /> {result.warnings.length} warning{result.warnings.length > 1 ? 's' : ''}
                 </div>
-                <ul className="text-xs text-amber-200 space-y-1 max-h-32 overflow-y-auto list-disc list-inside">
+                <ul className="text-xs text-amber-800 dark:text-amber-200 space-y-1 max-h-32 overflow-y-auto list-disc list-inside">
                   {result.warnings.map((w, i) => <li key={i}>{w}</li>)}
                 </ul>
               </div>
@@ -288,11 +292,11 @@ export default function RosterImport() {
 
             {/* Table */}
             {result.rows.length > 0 && (
-              <div className="rounded-xl overflow-hidden mb-5" style={{ border: '1px solid #2D3748' }}>
+              <div className="rounded-xl overflow-hidden mb-5" style={{ border: '1px solid var(--edge)' }}>
                 <div className="max-h-[45vh] overflow-y-auto">
                   <table className="w-full text-xs">
-                    <thead className="sticky top-0" style={{ backgroundColor: '#161B22' }}>
-                      <tr className="text-slate-400 uppercase tracking-wider text-[10px]">
+                    <thead className="sticky top-0" style={{ backgroundColor: 'var(--surface-panel)' }}>
+                      <tr className="text-fg-muted uppercase tracking-wider text-[10px]">
                         <th className="text-left px-3 py-2 font-bold">Name</th>
                         <th className="text-left px-3 py-2 font-bold">Role</th>
                         <th className="text-left px-3 py-2 font-bold">Period</th>
@@ -303,18 +307,18 @@ export default function RosterImport() {
                     </thead>
                     <tbody>
                       {result.rows.map((r, i) => (
-                        <tr key={i} style={{ backgroundColor: i % 2 ? '#0D1117' : '#12161D' }}>
-                          <td className="px-3 py-1.5 text-white font-medium">{r.name}</td>
-                          <td className="px-3 py-1.5 text-slate-400">{r.role}</td>
+                        <tr key={i} style={{ backgroundColor: i % 2 ? 'var(--surface-page)' : 'var(--surface-zebra)' }}>
+                          <td className="px-3 py-1.5 text-fg-strong font-medium">{r.name}</td>
+                          <td className="px-3 py-1.5 text-fg-muted">{r.role}</td>
                           <td className="px-3 py-1.5">
-                            <span className="inline-flex items-center gap-1.5 text-slate-200">
+                            <span className="inline-flex items-center gap-1.5 text-fg-bright">
                               <span className="w-2 h-2 rounded-sm" style={{ backgroundColor: SHIFT_COLORS[r.shift_type] }} />
                               {SHIFT_LABELS[r.shift_type]}
                             </span>
                           </td>
-                          <td className="px-3 py-1.5 text-slate-400">{r.shift_label || '—'}</td>
-                          <td className="px-3 py-1.5 text-slate-300">{LANE_LABELS[r.lane]}</td>
-                          <td className="px-3 py-1.5 text-slate-500 truncate max-w-[180px]">{r.source_location || '—'}</td>
+                          <td className="px-3 py-1.5 text-fg-muted">{r.shift_label || '—'}</td>
+                          <td className="px-3 py-1.5 text-fg-soft">{LANE_LABELS[r.lane]}</td>
+                          <td className="px-3 py-1.5 text-fg-faint truncate max-w-[180px]">{r.source_location || '—'}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -326,12 +330,12 @@ export default function RosterImport() {
             {/* Import action */}
             {result.rows.length > 0 && (
               <div className="flex items-center justify-between">
-                <label className="flex items-center gap-2 text-xs text-slate-400 cursor-pointer select-none">
+                <label className="flex items-center gap-2 text-xs text-fg-muted cursor-pointer select-none">
                   <input
                     type="checkbox"
                     checked={replaceDay}
                     onChange={(e) => setReplaceDay(e.target.checked)}
-                    className="accent-[#E41C23]"
+                    className="accent-brand"
                   />
                   Replace existing assignments for {distinctDates.length > 1 ? 'these dates' : 'this date'}
                 </label>
@@ -340,7 +344,7 @@ export default function RosterImport() {
                   onClick={handleImport}
                   disabled={importing}
                   className="flex items-center gap-2 px-6 py-3 rounded-xl font-black text-sm tracking-widest uppercase text-white transition-opacity hover:opacity-90 disabled:opacity-50"
-                  style={{ backgroundColor: '#E41C23' }}
+                  style={{ backgroundColor: 'var(--brand)' }}
                 >
                   <FileText size={15} />
                   {importing ? 'Importing…' : `Import ${result.rows.length} assignment${result.rows.length > 1 ? 's' : ''}`}

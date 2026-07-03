@@ -10,7 +10,7 @@ function SubmitButton() {
       type="submit"
       disabled={pending}
       className="w-full py-2.5 rounded-lg text-sm font-bold text-white transition-opacity"
-      style={{ backgroundColor: '#E41C23', opacity: pending ? 0.7 : 1 }}
+      style={{ backgroundColor: 'var(--brand)', opacity: pending ? 0.7 : 1 }}
     >
       {pending ? (
         <span className="flex items-center justify-center gap-2">
@@ -33,7 +33,7 @@ export default function LoginForm({ hasError }: { hasError: boolean }) {
       <div>
         <label
           htmlFor="password"
-          className="block text-xs font-bold uppercase tracking-widest text-slate-500 mb-1.5"
+          className="block text-xs font-bold uppercase tracking-widest text-fg-faint mb-1.5"
         >
           Access Code
         </label>
@@ -44,17 +44,17 @@ export default function LoginForm({ hasError }: { hasError: boolean }) {
           required
           autoFocus
           autoComplete="current-password"
-          className="w-full px-3 py-2.5 rounded-lg text-sm text-white outline-none"
+          className="w-full px-3 py-2.5 rounded-lg text-sm text-fg-strong outline-none"
           style={{
-            backgroundColor: '#0D1117',
-            border: `1px solid ${hasError ? '#E41C23' : '#2D3748'}`,
+            backgroundColor: 'var(--surface-input)',
+            border: `1px solid ${hasError ? 'var(--brand)' : 'var(--edge)'}`,
           }}
           placeholder="••••••••"
         />
       </div>
 
       {hasError && (
-        <p className="text-sm text-red-400">
+        <p className="text-sm text-red-600 dark:text-red-400">
           Incorrect access code. Please try again.
         </p>
       )}

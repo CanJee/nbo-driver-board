@@ -34,7 +34,7 @@ export default function SwimLane({
   return (
     <div
       className={`flex flex-col rounded-md overflow-hidden border ${className}`}
-      style={{ borderColor: '#2D2D3A', backgroundColor: '#161B22' }}
+      style={{ borderColor: 'var(--edge)', backgroundColor: 'var(--surface-panel)' }}
     >
       <LaneHeader laneId={laneId} count={drivers.length} dispatcher={dispatcher} />
 
@@ -42,11 +42,11 @@ export default function SwimLane({
         <SortableContext items={drivers.map((d) => d.id)} strategy={verticalListSortingStrategy}>
           <div
             className="lane-scroll flex-1 p-2 space-y-1.5 transition-colors"
-            style={{ backgroundColor: isOver ? '#1a2a1a' : '#0D1117' }}
+            style={{ backgroundColor: isOver ? 'var(--surface-drag-over)' : 'var(--surface-page)' }}
           >
             {drivers.length === 0 && (
               <div className="flex items-center justify-center h-16 mt-2">
-                <span className="text-[10px] text-slate-600 uppercase tracking-widest">
+                <span className="text-[10px] text-fg-ghost uppercase tracking-widest">
                   {isOver ? 'Drop here' : 'No drivers'}
                 </span>
               </div>
