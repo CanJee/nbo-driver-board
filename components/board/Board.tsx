@@ -8,7 +8,8 @@ import {
   DragOverEvent,
   DragOverlay,
   DragStartEvent,
-  PointerSensor,
+  MouseSensor,
+  TouchSensor,
   pointerWithin,
   rectIntersection,
   useSensor,
@@ -18,6 +19,7 @@ import { arrayMove } from '@dnd-kit/sortable';
 import { createClient } from '@/lib/supabase/client';
 import { AwayReason, Driver, DriverShift, LaneId, LocationStatus, MAIN_LANES } from '@/lib/types';
 import SwimLane from './SwimLane';
+import LaneTabs from './LaneTabs';
 import LiveClock from './LiveClock';
 import DriverCard from '@/components/cards/DriverCard';
 import CheckOutModal from '@/components/modals/CheckOutModal';
@@ -67,10 +69,49 @@ export default function Board({ initialDrivers, initialDispatchers }: BoardProps
 
   const supabase = createClient();
 
-  // Require 8px movement before drag activates — prevents conflict with click-to-expand
+  // Mouse drags after 8px of movement (prevents conflict with click-to-expand);
+  // touch drags after a 200ms press-and-hold so quick swipes keep scrolling the
+  // board/lanes instead of picking up a card. Split sensors (not PointerSensor)
+  // so a touch scroll can never race the mouse-style distance activation.
   const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 8 } })
+    useSensor(MouseSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 15 } })
   );
+
+  // Mobile snap-board: track which lane is in view so LaneTabs can highlight it
+  const boardRef = useRef<HTMLDivElement>(null);
+  const scrollRafRef = useRef<number | null>(null);
+  const [activeLaneIdx, setActiveLaneIdx] = useState(0);
+
+  const handleBoardScroll = () => {
+    if (scrollRafRef.current !== null) return;
+    scrollRafRef.current = requestAnimationFrame(() => {
+      scrollRafRef.current = null;
+      const el = boardRef.current;
+      if (!el) return;
+      const lanes = Array.from(el.children) as HTMLElement[];
+      const x = el.scrollLeft;
+      let best = 0;
+      let bestDist = Infinity;
+      // offsetLeft is layout position (scroll-independent), both measured from
+      // the same offsetParent — the nearest lane to the current scroll wins.
+      lanes.forEach((lane, i) => {
+        const dist = Math.abs(lane.offsetLeft - el.offsetLeft - x);
+        if (dist < bestDist) {
+          bestDist = dist;
+          best = i;
+        }
+      });
+      setActiveLaneIdx(best);
+    });
+  };
+
+  const scrollToLane = (idx: number) => {
+    const el = boardRef.current;
+    const lane = el?.children[idx] as HTMLElement | undefined;
+    if (!el || !lane) return;
+    el.scrollTo({ left: lane.offsetLeft - el.offsetLeft, behavior: 'smooth' });
+  };
 
   const fetchDrivers = useCallback(async () => {
     if (isDraggingRef.current) return;
@@ -281,6 +322,21 @@ export default function Board({ initialDrivers, initialDispatchers }: BoardProps
       .eq('id', driver.id);
   };
 
+  // ── MOVE TO LANE (tap alternative to drag — used by the mobile card UI) ──
+  const handleMoveToLane = async (driver: Driver, lane: LaneId) => {
+    if (driver.lane === lane) return;
+    // Append at the end of the target lane; gaps left in the source lane's
+    // ordering are harmless (order is only used relatively).
+    const nextOrder = drivers.filter((d) => d.lane === lane).length;
+    setDrivers((prev) =>
+      prev.map((d) => (d.id === driver.id ? { ...d, lane, lane_order: nextOrder } : d))
+    );
+    await supabase
+      .from('drivers')
+      .update({ lane, lane_order: nextOrder })
+      .eq('id', driver.id);
+  };
+
   // ── ASSIGN ──
   const handleAssign = async (walkieNumber: string, carNumber: string) => {
     if (!assignDriver) return;
@@ -345,43 +401,55 @@ export default function Board({ initialDrivers, initialDispatchers }: BoardProps
       onDragOver={handleDragOver}
       onDragEnd={handleDragEnd}
     >
-      <div className="flex flex-col h-screen p-3 gap-3 relative" style={{ backgroundColor: 'var(--surface-page)' }}>
+      <div className="flex flex-col h-dvh p-2 gap-2 lg:p-3 lg:gap-3 relative" style={{ backgroundColor: 'var(--surface-page)' }}>
 
-        {/* Header */}
+        {/* Header — compact single row on phones, full title from md up */}
         <div
-          className="flex items-center justify-between px-5 py-2 rounded-lg flex-shrink-0 border"
+          className="flex items-center justify-between gap-2 px-3 lg:px-5 py-2 rounded-lg flex-shrink-0 border"
           style={{ backgroundColor: 'var(--surface-panel)', borderColor: 'var(--brand)' }}
         >
-          <div className="flex items-center w-72">
-            <NboLogo width={180} height={65} />
+          <div className="flex items-center lg:w-72">
+            <NboLogo width={180} height={65} className="w-24 lg:w-[180px]" />
           </div>
-          <h1 className="text-xl font-bold text-fg-strong tracking-wide text-center">
+          <h1 className="hidden md:block text-base lg:text-xl font-bold text-fg-strong tracking-wide text-center whitespace-nowrap">
             Transportation Dispatch{' '}
             <span className="font-light text-fg-muted">—</span>{' '}
             <span style={{ color: 'var(--brand)' }}>Live Status</span>
           </h1>
-          <div className="w-72 flex items-center justify-end gap-3">
+          <div className="lg:w-72 flex items-center justify-end gap-1.5 lg:gap-3">
             <ThemeToggle />
             <Link
               href="/import"
-              className="px-3 py-1.5 rounded-lg text-xs font-bold tracking-widest uppercase text-fg-soft hover:text-fg-strong transition-colors whitespace-nowrap"
+              className="px-2 lg:px-3 py-1.5 rounded-lg text-xs font-bold tracking-widest uppercase text-fg-soft hover:text-fg-strong transition-colors whitespace-nowrap"
               style={{ border: '1px solid var(--edge)' }}
             >
               Import
             </Link>
             <button
               onClick={() => setShowCheckIn(true)}
-              className="px-4 py-1.5 rounded-lg text-xs font-black tracking-widest uppercase text-white transition-opacity hover:opacity-80 whitespace-nowrap"
+              className="px-2.5 lg:px-4 py-1.5 rounded-lg text-xs font-black tracking-widest uppercase text-white transition-opacity hover:opacity-80 whitespace-nowrap"
               style={{ backgroundColor: 'var(--brand)', border: '1px solid var(--brand)' }}
             >
               + Check In
             </button>
-            <LiveClock />
+            <LiveClock className="text-lg lg:text-2xl" />
           </div>
         </div>
 
-        {/* Board — 5 equal columns */}
-        <div className="flex flex-1 gap-2 min-h-0 pb-6">
+        {/* Lane switcher — phones/tablets only */}
+        <LaneTabs
+          lanes={ALL_LANES}
+          counts={ALL_LANES.map((l) => driversInLane(l).length)}
+          activeIdx={activeLaneIdx}
+          onSelect={scrollToLane}
+        />
+
+        {/* Board — swipeable snap lanes below lg, 5 equal columns at lg+ */}
+        <div
+          ref={boardRef}
+          onScroll={handleBoardScroll}
+          className={`board-scroll flex flex-1 gap-2 min-h-0 pb-6 ${activeDriver ? 'board-dragging' : ''}`}
+        >
           {ALL_LANES.map((laneId) => (
             <SwimLane
               key={laneId}
@@ -393,7 +461,8 @@ export default function Board({ initialDrivers, initialDispatchers }: BoardProps
               onUpdateNotes={handleUpdateNotes}
               onSetAway={handleSetAway}
               onSetLocationStatus={handleSetLocationStatus}
-              className="flex-1"
+              onMoveToLane={handleMoveToLane}
+              className="snap-start flex-none w-[86vw] sm:w-[46vw] md:w-[31.5vw] lg:w-auto lg:flex-1"
             />
           ))}
         </div>
@@ -431,6 +500,7 @@ export default function Board({ initialDrivers, initialDispatchers }: BoardProps
             onUpdateNotes={() => {}}
             onSetAway={() => {}}
             onSetLocationStatus={() => {}}
+            onMoveToLane={() => {}}
             isDragOverlay
           />
         )}

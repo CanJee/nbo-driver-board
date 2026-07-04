@@ -138,8 +138,13 @@ body {
   background-color: var(--surface-page);
   color: var(--fg);
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  /* dvh tracks the mobile browser chrome (URL bar) so the footer isn't cut
+     off on phones; the vh line stays as a fallback for older engines. */
   height: 100vh;
+  height: 100dvh;
   width: 100vw;
+  /* App shell: block pull-to-refresh / rubber-banding behind the board */
+  overscroll-behavior: none;
 }
 
 /* Scrollable lanes */
@@ -162,10 +167,63 @@ body {
   border-radius: 2px;
 }
 
+/* Horizontal board scroller. Below lg lanes are wider than the screen, so the
+   board swipes sideways and snaps one lane into view; at lg+ all lanes fit and
+   snapping is off. Snap is also lifted mid-drag (.board-dragging) so dnd-kit's
+   edge auto-scroll isn't fought by the browser re-snapping every frame. */
+.board-scroll {
+  overflow-x: auto;
+  overscroll-behavior-x: contain; /* don't trigger browser back-swipe between lanes */
+  scroll-snap-type: x mandatory;
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar-thumb) transparent;
+}
+
+.board-scroll.board-dragging {
+  scroll-snap-type: none;
+}
+
+@media (min-width: 1024px) {
+  .board-scroll {
+    scroll-snap-type: none;
+  }
+}
+
+.board-scroll::-webkit-scrollbar {
+  height: 4px;
+}
+
+.board-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.board-scroll::-webkit-scrollbar-thumb {
+  background-color: var(--scrollbar-thumb);
+  border-radius: 2px;
+}
+
+/* iOS Safari auto-zooms the page when a focused input is under 16px; bump
+   only on touch devices. !important is needed to beat Tailwind text-sm
+   utility classes already on these elements. */
+@media (pointer: coarse) {
+  input,
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
+}
+
 /* Card hover glow */
 .card-glow:hover {
   box-shadow: 0 0 10px var(--card-glow);
   cursor: pointer;
+}
+
+/* Long-press-to-drag on touch shouldn't pop the iOS text-selection callout
+   or flash the tap highlight */
+.card-glow {
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
 }
 
 /* Away card dim */
@@ -188,6 +246,7 @@ body {
   justify-content: center;
   background-color: var(--backdrop);
   backdrop-filter: blur(2px);
+  padding: 1rem; /* keeps dialogs off the screen edges on phones */
 }
 
 /* Toast animation */

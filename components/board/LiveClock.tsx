@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { TOURNAMENT_TZ } from '@/lib/date';
 
-export default function LiveClock() {
+export default function LiveClock({ className = 'text-2xl' }: { className?: string }) {
   const [time, setTime] = useState('');
 
   useEffect(() => {
@@ -25,7 +25,7 @@ export default function LiveClock() {
 
   return (
     <span
-      className="text-2xl font-bold tabular-nums tracking-wider"
+      className={`font-bold tabular-nums tracking-wider ${className}`}
       style={{ color: 'var(--brand)' }}
     >
       {time}

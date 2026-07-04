@@ -58,7 +58,7 @@ export default function AssignModal({ driver, activeDrivers, onConfirm, onCancel
   return (
     <div className="modal-backdrop" onClick={onCancel}>
       <div
-        className="rounded-xl p-6 w-80 shadow-2xl"
+        className="rounded-xl p-6 w-full max-w-80 shadow-2xl"
         style={{ backgroundColor: 'var(--surface-panel)', border: '1px solid #3B82F6' }}
         onClick={(e) => e.stopPropagation()}
       >

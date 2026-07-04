@@ -32,7 +32,7 @@ export default function CheckInCompleteModal({
   return (
     <div className="modal-backdrop" onClick={onDone}>
       <div
-        className="rounded-2xl shadow-2xl w-[400px] overflow-hidden"
+        className="rounded-2xl shadow-2xl w-full max-w-[400px] overflow-hidden"
         style={{ backgroundColor: 'var(--surface-page)', border: '1px solid var(--status-success)' }}
         onClick={(e) => e.stopPropagation()}
       >
