@@ -4,7 +4,10 @@ import { useEffect, useRef, useState } from 'react';
 import { ChevronUp, GripVertical, Pencil, Save, X } from 'lucide-react';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { AwayReason, Driver, LocationStatus, SHIFT_COLORS, SHIFT_LABELS, LANE_LABELS, AWAY_ICONS, AWAY_LABELS } from '@/lib/types';
+import { AwayReason, Driver, LaneId, LocationStatus, MAIN_LANES, SHIFT_COLORS, SHIFT_LABELS, LANE_LABELS, AWAY_ICONS, AWAY_LABELS } from '@/lib/types';
+
+// Same lane set the board renders — targets for the mobile "Move to" buttons.
+const MOVE_LANES: LaneId[] = [...MAIN_LANES, 'meals'];
 
 /** Build the left bar: solid for one shift, an evenly-split hard-stop gradient for multiple. */
 function shiftBarBackground(colors: string[]): string {
@@ -23,6 +26,7 @@ interface DriverCardProps {
   onUpdateNotes: (driver: Driver, notes: string) => void;
   onSetAway: (driver: Driver, reason: AwayReason | null) => void;
   onSetLocationStatus: (driver: Driver, status: LocationStatus | null) => void;
+  onMoveToLane: (driver: Driver, lane: LaneId) => void;
   isDragOverlay?: boolean;
 }
 
@@ -33,6 +37,7 @@ export default function DriverCard({
   onUpdateNotes,
   onSetAway,
   onSetLocationStatus,
+  onMoveToLane,
   isDragOverlay = false,
 }: DriverCardProps) {
   const [expanded, setExpanded] = useState(false);
@@ -124,7 +129,7 @@ export default function DriverCard({
             {...attributes}
             {...listeners}
             suppressHydrationWarning
-            className="flex items-center justify-center w-7 h-full cursor-grab active:cursor-grabbing text-fg-ghost hover:text-fg-muted flex-shrink-0"
+            className="flex items-center justify-center w-7 h-full cursor-grab active:cursor-grabbing text-fg-ghost hover:text-fg-muted flex-shrink-0 touch-none"
           >
             <GripVertical size={15} />
           </div>
@@ -184,7 +189,7 @@ export default function DriverCard({
                 {...attributes}
                 {...listeners}
                 suppressHydrationWarning
-                className="cursor-grab active:cursor-grabbing text-fg-ghost hover:text-fg-muted flex-shrink-0"
+                className="cursor-grab active:cursor-grabbing text-fg-ghost hover:text-fg-muted flex-shrink-0 touch-none"
               >
                 <GripVertical size={14} />
               </div>
@@ -314,6 +319,26 @@ export default function DriverCard({
                 ))}
               </div>
             )}
+          </div>
+
+          {/* Move to lane — tap alternative to dragging across the snap board.
+              Hidden at lg+ where all lanes are on screen and mouse-drag is easy. */}
+          <div className="mb-3 lg:hidden">
+            <div className="text-[10px] font-bold tracking-widest uppercase text-fg-faint mb-1.5">
+              Move To
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {MOVE_LANES.filter((l) => l !== driver.lane).map((l) => (
+                <button
+                  key={l}
+                  onClick={() => onMoveToLane(driver, l)}
+                  className="px-2.5 py-1.5 rounded text-[11px] font-bold text-fg-soft transition-colors hover:bg-black/5 dark:hover:bg-white/10"
+                  style={{ border: '1px solid var(--edge-muted)' }}
+                >
+                  {LANE_LABELS[l]} →
+                </button>
+              ))}
+            </div>
           </div>
 
           {/* Notes */}

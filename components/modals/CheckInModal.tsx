@@ -233,7 +233,7 @@ export default function CheckInModal({ onConfirm, onCancel }: CheckInModalProps)
   return (
     <div className="modal-backdrop" onClick={onCancel}>
       <div
-        className="rounded-2xl shadow-2xl w-[480px] max-h-[90vh] overflow-y-auto"
+        className="rounded-2xl shadow-2xl w-full max-w-[480px] max-h-[90dvh] overflow-y-auto"
         style={{ backgroundColor: 'var(--surface-page)', border: '1px solid var(--brand)' }}
         onClick={(e) => e.stopPropagation()}
       >
@@ -438,7 +438,7 @@ export default function CheckInModal({ onConfirm, onCancel }: CheckInModalProps)
               style={{ color: 'var(--brand)' }}>
               3 · Starting Lane
             </label>
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
               {ALL_CHECKIN_LANES.map((l) => (
                 <button
                   key={l}

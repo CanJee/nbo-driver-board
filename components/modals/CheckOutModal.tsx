@@ -12,7 +12,7 @@ export default function CheckOutModal({ driver, onConfirm, onCancel }: CheckOutM
   return (
     <div className="modal-backdrop" onClick={onCancel}>
       <div
-        className="rounded-xl p-6 w-80 shadow-2xl"
+        className="rounded-xl p-6 w-full max-w-80 shadow-2xl"
         style={{ backgroundColor: 'var(--surface-panel)', border: '1px solid var(--brand)' }}
         onClick={(e) => e.stopPropagation()}
       >

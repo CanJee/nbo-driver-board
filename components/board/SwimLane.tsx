@@ -16,6 +16,7 @@ interface SwimLaneProps {
   onUpdateNotes: (driver: Driver, notes: string) => void;
   onSetAway: (driver: Driver, reason: AwayReason | null) => void;
   onSetLocationStatus: (driver: Driver, status: LocationStatus | null) => void;
+  onMoveToLane: (driver: Driver, lane: LaneId) => void;
 }
 
 export default function SwimLane({
@@ -28,6 +29,7 @@ export default function SwimLane({
   onUpdateNotes,
   onSetAway,
   onSetLocationStatus,
+  onMoveToLane,
 }: SwimLaneProps) {
   const { setNodeRef, isOver } = useDroppable({ id: laneId });
 
@@ -60,6 +62,7 @@ export default function SwimLane({
                 onUpdateNotes={onUpdateNotes}
                 onSetAway={onSetAway}
                 onSetLocationStatus={onSetLocationStatus}
+                onMoveToLane={onMoveToLane}
               />
             ))}
           </div>

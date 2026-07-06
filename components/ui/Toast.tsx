@@ -22,7 +22,7 @@ export default function Toast({ message, onDone }: ToastProps) {
 
   return (
     <div
-      className={`fixed top-4 right-4 z-50 flex items-center gap-2 px-4 py-3 rounded-lg shadow-xl text-white text-sm font-semibold ${
+      className={`fixed top-4 right-4 z-50 flex items-center gap-2 px-4 py-3 rounded-lg shadow-xl text-white text-sm font-semibold max-w-[calc(100vw-2rem)] ${
         exiting ? 'toast-exit' : 'toast-enter'
       }`}
       style={{ backgroundColor: '#16A34A', minWidth: '260px' }}
