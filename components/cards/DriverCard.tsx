@@ -69,17 +69,19 @@ export default function DriverCard({
     data: { driver },
   });
 
+  const isUnassigned = driver.status === 'unassigned';
+  const isAway = driver.status === 'away';
+
   const style: React.CSSProperties = {
     transform: CSS.Transform.toString(transform),
     transition,
-    // Search dim fades non-matches without unmounting them, so drag-reorder
-    // and realtime updates keep working exactly as they do outside a search.
-    opacity: isDragging ? 0.3 : searchDim ? 0.25 : 1,
+    // Single source of truth for card opacity (a stylesheet rule would lose to
+    // this inline value). Priority: drag ghost, then search (a hit stays at
+    // full opacity even when away; non-matches fade without unmounting so
+    // drag-reorder and realtime updates keep working), then away dim.
+    opacity: isDragging ? 0.3 : searchHit ? 1 : searchDim ? 0.25 : isAway && !isDragOverlay ? 0.5 : 1,
     zIndex: isDragOverlay ? 999 : undefined,
   };
-
-  const isUnassigned = driver.status === 'unassigned';
-  const isAway = driver.status === 'away';
 
   // One colour band per shift (de-duped) so a double shift shows e.g. blue+green.
   // Fall back to the primary shift_type for legacy rows with no `shifts` array.
@@ -117,7 +119,7 @@ export default function DriverCard({
       ref={setNodeRef}
       style={{ ...containerStyle, ...style }}
       data-search-hit={searchHit ? '' : undefined}
-      className={`card-glow relative select-none ${isAway && !isDragOverlay ? 'card-away' : ''}`}
+      className="card-glow relative select-none"
     >
       {/* Shift colour bar — solid for one shift, split for double/triple */}
       <div
