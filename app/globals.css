@@ -226,11 +226,6 @@ body {
   -webkit-tap-highlight-color: transparent;
 }
 
-/* Away card dim */
-.card-away {
-  opacity: 0.5;
-}
-
 /* Drag overlay ghost */
 .drag-ghost {
   opacity: 0.3;
