@@ -5,6 +5,7 @@ import { ChevronUp, GripVertical, Pencil, Save, X } from 'lucide-react';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { AwayReason, Driver, LaneId, LocationStatus, MAIN_LANES, SHIFT_COLORS, SHIFT_LABELS, LANE_LABELS, AWAY_ICONS, AWAY_LABELS } from '@/lib/types';
+import { SearchMatchField } from '@/lib/search';
 
 // Same lane set the board renders — targets for the mobile "Move to" buttons.
 const MOVE_LANES: LaneId[] = [...MAIN_LANES, 'meals'];
@@ -28,6 +29,10 @@ interface DriverCardProps {
   onSetLocationStatus: (driver: Driver, status: LocationStatus | null) => void;
   onMoveToLane: (driver: Driver, lane: LaneId) => void;
   isDragOverlay?: boolean;
+  /** Which field the active search matched, or null if this card is not a hit. */
+  searchHit?: SearchMatchField | null;
+  /** True when a search is active and this card is NOT a hit (fades it out). */
+  searchDim?: boolean;
 }
 
 export default function DriverCard({
@@ -39,6 +44,8 @@ export default function DriverCard({
   onSetLocationStatus,
   onMoveToLane,
   isDragOverlay = false,
+  searchHit = null,
+  searchDim = false,
 }: DriverCardProps) {
   const [expanded, setExpanded] = useState(false);
   const [editingNotes, setEditingNotes] = useState(false);
@@ -65,7 +72,9 @@ export default function DriverCard({
   const style: React.CSSProperties = {
     transform: CSS.Transform.toString(transform),
     transition,
-    opacity: isDragging ? 0.3 : 1,
+    // Search dim fades non-matches without unmounting them, so drag-reorder
+    // and realtime updates keep working exactly as they do outside a search.
+    opacity: isDragging ? 0.3 : searchDim ? 0.25 : 1,
     zIndex: isDragOverlay ? 999 : undefined,
   };
 
@@ -89,6 +98,8 @@ export default function DriverCard({
     borderRadius: '6px',
     backgroundColor: 'var(--surface-card)',
     paddingLeft: '6px',
+    // Search hits get the amber ring + glow (same family as the hover glow)
+    ...(searchHit ? { boxShadow: '0 0 0 2px var(--status-warn), 0 0 10px var(--card-glow)' } : {}),
   };
 
   const handleSaveNotes = () => {
@@ -105,6 +116,7 @@ export default function DriverCard({
     <div
       ref={setNodeRef}
       style={{ ...containerStyle, ...style }}
+      data-search-hit={searchHit ? '' : undefined}
       className={`card-glow relative select-none ${isAway && !isDragOverlay ? 'card-away' : ''}`}
     >
       {/* Shift colour bar — solid for one shift, split for double/triple */}
@@ -124,17 +136,19 @@ export default function DriverCard({
 
       {/* ── COLLAPSED VIEW ── */}
       {!expanded && (
-        <div className="flex items-center h-[60px]">
+        // min-h (not fixed h) so the search snippet line can grow the card;
+        // the drag handle uses self-stretch because h-full needs a fixed parent.
+        <div className="flex items-center min-h-[60px]">
           <div
             {...attributes}
             {...listeners}
             suppressHydrationWarning
-            className="flex items-center justify-center w-7 h-full cursor-grab active:cursor-grabbing text-fg-ghost hover:text-fg-muted flex-shrink-0 touch-none"
+            className="flex items-center justify-center w-7 self-stretch cursor-grab active:cursor-grabbing text-fg-ghost hover:text-fg-muted flex-shrink-0 touch-none"
           >
             <GripVertical size={15} />
           </div>
           <div
-            className="flex-1 flex items-center justify-between pr-3 cursor-pointer min-w-0"
+            className="flex-1 flex items-center justify-between py-2 pr-3 cursor-pointer min-w-0"
             onClick={() => setExpanded(true)}
           >
             <div className="min-w-0">
@@ -150,6 +164,18 @@ export default function DriverCard({
                   </span>
                 )}
               </div>
+              {/* Phone and notes aren't visible on collapsed cards, so when the
+                  search matched one of them, say why this card lit up */}
+              {searchHit === 'phone' && (
+                <div className="text-[11px] mt-0.5 truncate" style={{ color: 'var(--status-warn-fg)' }}>
+                  Phone: {driver.phone}
+                </div>
+              )}
+              {searchHit === 'notes' && (
+                <div className="text-[11px] mt-0.5 truncate" style={{ color: 'var(--status-warn-fg)' }} title={driver.notes ?? ''}>
+                  Note: {driver.notes}
+                </div>
+              )}
             </div>
             <div className="flex items-center gap-1.5 flex-shrink-0 ml-2">
               {driver.location_status === 'en_route' && (

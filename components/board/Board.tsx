@@ -1,7 +1,8 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
+import { Search } from 'lucide-react';
 import {
   DndContext,
   DragEndEvent,
@@ -18,8 +19,10 @@ import {
 import { arrayMove } from '@dnd-kit/sortable';
 import { createClient } from '@/lib/supabase/client';
 import { AwayReason, Driver, DriverShift, LaneId, LocationStatus, MAIN_LANES } from '@/lib/types';
+import { matchDriver, SearchMatchField, SearchState } from '@/lib/search';
 import SwimLane from './SwimLane';
 import LaneTabs from './LaneTabs';
+import SearchBox from './SearchBox';
 import LiveClock from './LiveClock';
 import DriverCard from '@/components/cards/DriverCard';
 import CheckOutModal from '@/components/modals/CheckOutModal';
@@ -57,6 +60,39 @@ export default function Board({ initialDrivers, initialDispatchers }: BoardProps
     lane: LaneId;
   } | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+
+  // Search is per-browser view state (never persisted), so one dispatcher
+  // searching doesn't affect what anyone else's screen shows. Matches are
+  // highlighted rather than filtered out: every card stays mounted, which
+  // keeps drag-reorder safe (lane_order is recomputed from rendered lists)
+  // and preserves the spatial layout people rely on at a glance.
+  const [searchQuery, setSearchQuery] = useState('');
+  const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
+  const searchActive = searchQuery.trim() !== '';
+  const searchMatches = useMemo(() => {
+    const m = new Map<string, SearchMatchField>();
+    if (!searchActive) return m;
+    for (const d of drivers) {
+      const field = matchDriver(d, searchQuery);
+      if (field) m.set(d.id, field);
+    }
+    return m;
+  }, [drivers, searchQuery, searchActive]);
+  const search: SearchState | null = searchActive
+    ? { query: searchQuery, matches: searchMatches }
+    : null;
+
+  // Open/close the below-header search row (below xl only). Closing also
+  // clears the query so the board can never stay dimmed with no visible
+  // search UI.
+  const toggleSearchRow = () => {
+    if (mobileSearchOpen || searchActive) {
+      setMobileSearchOpen(false);
+      setSearchQuery('');
+    } else {
+      setMobileSearchOpen(true);
+    }
+  };
 
   // Suppress real-time refetch while dragging to avoid flicker
   const isDraggingRef = useRef(false);
@@ -403,20 +439,49 @@ export default function Board({ initialDrivers, initialDispatchers }: BoardProps
     >
       <div className="flex flex-col h-dvh p-2 gap-2 lg:p-3 lg:gap-3 relative" style={{ backgroundColor: 'var(--surface-page)' }}>
 
-        {/* Header — compact single row on phones, full title from md up */}
+        {/* Header — compact single row on phones, full title from md up.
+            At xl+ both side sections become equal flex halves (flex-1 basis-0)
+            so the title stays truly centred while the right cluster grows to
+            fit the inline search input; below xl they keep natural widths
+            because the phone/tablet header has no room to spare. */}
         <div
           className="flex items-center justify-between gap-2 px-3 lg:px-5 py-2 rounded-lg flex-shrink-0 border"
           style={{ backgroundColor: 'var(--surface-panel)', borderColor: 'var(--brand)' }}
         >
-          <div className="flex items-center lg:w-72">
+          <div className="flex items-center xl:flex-1 xl:basis-0">
             <NboLogo width={180} height={65} className="w-24 lg:w-[180px]" />
           </div>
-          <h1 className="hidden md:block text-base lg:text-xl font-bold text-fg-strong tracking-wide text-center whitespace-nowrap">
+          <h1 className="hidden md:block flex-shrink-0 text-base lg:text-xl font-bold text-fg-strong tracking-wide text-center whitespace-nowrap">
             Transportation Dispatch{' '}
             <span className="font-light text-fg-muted">—</span>{' '}
             <span style={{ color: 'var(--brand)' }}>Live Status</span>
           </h1>
-          <div className="lg:w-72 flex items-center justify-end gap-1.5 lg:gap-3">
+          <div className="flex items-center justify-end gap-1.5 lg:gap-3 xl:flex-1 xl:basis-0">
+            {/* Search entry points by breakpoint: inline input at xl+; header
+                icon toggle for lg–xl (LaneTabs is hidden there); below lg the
+                toggle lives in the LaneTabs strip to keep the header uncrowded. */}
+            <SearchBox
+              value={searchQuery}
+              onChange={setSearchQuery}
+              matchCount={searchActive ? searchMatches.size : null}
+              enableSlashShortcut
+              className={`hidden xl:flex flex-1 min-w-[80px] transition-all ${
+                searchActive ? 'max-w-[240px]' : 'max-w-[150px] focus-within:max-w-[240px]'
+              }`}
+            />
+            <button
+              type="button"
+              aria-label={mobileSearchOpen || searchActive ? 'Close search' : 'Search drivers'}
+              onClick={toggleSearchRow}
+              className="hidden lg:flex xl:hidden p-1.5 rounded border border-edge transition-colors"
+              style={
+                mobileSearchOpen || searchActive
+                  ? { color: 'var(--brand)', borderColor: 'var(--brand)' }
+                  : { color: 'var(--fg-soft)' }
+              }
+            >
+              <Search size={16} />
+            </button>
             <ThemeToggle />
             <Link
               href="/import"
@@ -440,9 +505,32 @@ export default function Board({ initialDrivers, initialDispatchers }: BoardProps
         <LaneTabs
           lanes={ALL_LANES}
           counts={ALL_LANES.map((l) => driversInLane(l).length)}
+          matchCounts={
+            search
+              ? ALL_LANES.map((l) => driversInLane(l).filter((d) => searchMatches.has(d.id)).length)
+              : undefined
+          }
           activeIdx={activeLaneIdx}
           onSelect={scrollToLane}
+          searchOn={mobileSearchOpen || searchActive}
+          onToggleSearch={toggleSearchRow}
         />
+
+        {/* Full-width search row for headers too narrow for the inline input.
+            Also shown whenever a query is active so shrinking the window can
+            never leave the board dimmed with no visible search UI. */}
+        {(mobileSearchOpen || searchActive) && (
+          <div className="xl:hidden flex-shrink-0">
+            <SearchBox
+              value={searchQuery}
+              onChange={setSearchQuery}
+              matchCount={searchActive ? searchMatches.size : null}
+              autoFocus
+              onDismiss={() => setMobileSearchOpen(false)}
+              className="flex w-full"
+            />
+          </div>
+        )}
 
         {/* Board — swipeable snap lanes below lg, 5 equal columns at lg+ */}
         <div
@@ -462,6 +550,7 @@ export default function Board({ initialDrivers, initialDispatchers }: BoardProps
               onSetAway={handleSetAway}
               onSetLocationStatus={handleSetLocationStatus}
               onMoveToLane={handleMoveToLane}
+              search={search}
               className="snap-start flex-none w-[86vw] sm:w-[46vw] md:w-[31.5vw] lg:w-auto lg:flex-1"
             />
           ))}
