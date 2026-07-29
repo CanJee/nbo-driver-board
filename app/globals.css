@@ -228,17 +228,25 @@ body {
   }
 
   /* Cards wrap into columns so a crowded lane grows sideways instead of
-     scrolling — nobody is at the TV to scroll it. The count is set explicitly
-     rather than with auto-fill: auto-fill packs in as many columns as happen to
-     fit, which fragments a lane of four drivers into two stubby columns purely
-     because the lane is wide. --lane-cols is exactly the number of columns the
-     lane needs, and matches its width weight.
+     scrolling — nobody is at the TV to scroll it.
+     The queue has to stay readable as one sequence, so it runs down a column and
+     then over to the top of the next (grid-auto-flow: column). --lane-rows is
+     how far down to fill before starting the next column: it is set to exactly
+     ceil(count / cols) rather than every row that fits, because otherwise the
+     grid flows row-first and the last driver ends up at the foot of whichever
+     column the count lands on — checking one person out would move "the bottom"
+     to the other column.
+     Column count is likewise explicit rather than auto-fill, which packs in as
+     many columns as happen to fit and would fragment a lane of four drivers into
+     two stubby columns purely because the lane is wide.
      align-content: start stops spare lane height being distributed into the
      rows; align-items: start stops one expanded card stretching the cards beside
      it (ragged row bottoms are the intended trade-off). */
   .lane-scroll.lane-grid {
     display: grid;
+    grid-auto-flow: column;
     grid-template-columns: repeat(var(--lane-cols, 1), minmax(0, 1fr));
+    grid-template-rows: repeat(var(--lane-rows, 1), min-content);
     align-content: start;
     align-items: start;
   }

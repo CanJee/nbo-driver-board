@@ -69,7 +69,10 @@ const LANE_LIST_PADDING_PX = 16;
 // sensible lane widths; the ResizeObserver refines it right after mount.
 const DEFAULT_ROWS_PER_COL = 12;
 // A single very full lane shouldn't be allowed to starve the other four.
-const MAX_LANE_GROW = 3;
+const MAX_LANE_COLS = 3;
+
+/** Per-lane card grid: columns across, and rows to fill down each column. */
+type LaneLayout = Record<LaneId, { cols: number; rows: number }>;
 
 const byLaneOrder = (a: Driver, b: Driver) => a.lane_order - b.lane_order;
 
@@ -267,23 +270,38 @@ export default function Board({ initialDrivers, initialDispatchers }: BoardProps
     [drivers]
   );
 
-  // How many card columns each lane wants. Crowded lanes get proportionally
-  // wider so their cards wrap into extra columns instead of scrolling out of
-  // sight on the TV, and near-empty lanes shrink back to a single column.
+  // Each lane's card grid: how many columns it needs, and how far down to fill
+  // each one before starting the next. Crowded lanes get proportionally wider so
+  // their cards wrap sideways instead of scrolling out of sight on the TV, and
+  // near-empty lanes stay a single column.
+  //
+  // `rows` is what makes the queue read top-to-bottom then left-to-right. Spread
+  // the cards over every available row instead and the grid fills row-first, so
+  // the last driver lands at the foot of whichever column the count happens to
+  // end on — check one person out and "the bottom" jumps to the other column.
+  //
   // Frozen while a card is in flight: handleDragOver moves cards between lanes
-  // optimistically, and re-weighting mid-drag would animate the lanes out from
-  // under the drop rects dnd-kit measured when the drag began.
-  const frozenGrowsRef = useRef<LaneGrows | null>(null);
-  const autoGrows = useMemo<LaneGrows>(() => {
-    if (activeDriver && frozenGrowsRef.current) return frozenGrowsRef.current;
-    const next: LaneGrows = {};
+  // optimistically, and re-flowing mid-drag would shift the lanes out from under
+  // the drop rects dnd-kit measured when the drag began.
+  const frozenLayoutRef = useRef<LaneLayout | null>(null);
+  const laneLayout = useMemo<LaneLayout>(() => {
+    if (activeDriver && frozenLayoutRef.current) return frozenLayoutRef.current;
+    const next = {} as LaneLayout;
     for (const lane of ALL_LANES) {
       const count = drivers.filter((d) => d.lane === lane).length;
-      next[lane] = Math.min(MAX_LANE_GROW, Math.max(1, Math.ceil(count / rowsPerCol)));
+      const cols = Math.min(MAX_LANE_COLS, Math.max(1, Math.ceil(count / rowsPerCol)));
+      next[lane] = { cols, rows: Math.max(1, Math.ceil(count / cols)) };
     }
-    frozenGrowsRef.current = next;
+    frozenLayoutRef.current = next;
     return next;
   }, [drivers, rowsPerCol, activeDriver]);
+
+  // A lane is exactly as wide as the number of columns it is showing.
+  const autoGrows = useMemo<LaneGrows>(() => {
+    const g: LaneGrows = {};
+    for (const lane of ALL_LANES) g[lane] = laneLayout[lane].cols;
+    return g;
+  }, [laneLayout]);
 
   const effectiveGrows = laneWidths.mode === 'manual' ? laneWidths.grows : autoGrows;
 
@@ -705,11 +723,12 @@ export default function Board({ initialDrivers, initialDispatchers }: BoardProps
                 gridMode={isLgUp}
                 // Width weight and column count are the same number, so a lane
                 // is always exactly as wide as the columns it is showing.
-                // Manual drags change the weight only — never the column count.
+                // Manual drags change the weight only — never the grid itself.
                 style={
                   {
                     '--lane-grow': effectiveGrows[laneId] ?? 1,
-                    '--lane-cols': autoGrows[laneId] ?? 1,
+                    '--lane-cols': laneLayout[laneId].cols,
+                    '--lane-rows': laneLayout[laneId].rows,
                   } as React.CSSProperties
                 }
                 className="snap-start flex-none w-[86vw] sm:w-[46vw] md:w-[31.5vw] lg:w-auto"
