@@ -280,19 +280,29 @@ export default function Board({ initialDrivers, initialDispatchers }: BoardProps
   // the last driver lands at the foot of whichever column the count happens to
   // end on — check one person out and "the bottom" jumps to the other column.
   //
-  // Frozen while a card is in flight: handleDragOver moves cards between lanes
-  // optimistically, and re-flowing mid-drag would shift the lanes out from under
-  // the drop rects dnd-kit measured when the drag began.
+  // Column count is held still for the whole drag, because it also sets the lane
+  // width: re-widening a lane mid-drag would shift it out from under the drop
+  // rects dnd-kit measured when the drag began.
+  //
+  // Rows, though, have to keep following the live count. handleDragOver drops the
+  // card into the target lane optimistically, and a grid still pinned to the old
+  // count has no slot for it — with grid-auto-flow: column the surplus card
+  // spills into an *implicit* extra column, squeezing every card in that lane to
+  // a sliver. Rows only ever grow mid-drag, so the lane the card came from
+  // doesn't reshuffle its columns behind the dispatcher.
   const frozenLayoutRef = useRef<LaneLayout | null>(null);
   const laneLayout = useMemo<LaneLayout>(() => {
-    if (activeDriver && frozenLayoutRef.current) return frozenLayoutRef.current;
+    const frozen = activeDriver ? frozenLayoutRef.current : null;
     const next = {} as LaneLayout;
     for (const lane of ALL_LANES) {
       const count = drivers.filter((d) => d.lane === lane).length;
-      const cols = Math.min(MAX_LANE_COLS, Math.max(1, Math.ceil(count / rowsPerCol)));
-      next[lane] = { cols, rows: Math.max(1, Math.ceil(count / cols)) };
+      const cols =
+        frozen?.[lane].cols ??
+        Math.min(MAX_LANE_COLS, Math.max(1, Math.ceil(count / rowsPerCol)));
+      const rows = Math.max(frozen?.[lane].rows ?? 1, Math.ceil(count / cols), 1);
+      next[lane] = { cols, rows };
     }
-    frozenLayoutRef.current = next;
+    if (!frozen) frozenLayoutRef.current = next;
     return next;
   }, [drivers, rowsPerCol, activeDriver]);
 
