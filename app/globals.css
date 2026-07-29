@@ -101,6 +101,17 @@
   --backdrop: rgba(0, 0, 0, 0.75);
 }
 
+/* Layout tokens — geometry rather than colour, so they live on :root only (the
+   .dark block above overrides colours and must not fork these).
+   --card-min sets how narrow a card column may get, which is what decides how
+   many columns a lane wraps into; --lane-min keeps every lane wide enough for
+   one full column. LANE_MIN_PX in LaneResizer.tsx mirrors --lane-min. */
+:root {
+  --card-min: 210px;
+  --card-gap: 6px; /* must match the gap-1.5 on the lane's card list */
+  --lane-chrome: 18px; /* lane list padding (2 × p-2) + the lane's 1px borders */
+}
+
 /* Expose tokens as Tailwind utilities: bg-page, bg-panel, text-fg-muted,
    border-edge, accent-brand, … They flip automatically with the theme. */
 @theme inline {
@@ -186,6 +197,56 @@ body {
 @media (min-width: 1024px) {
   .board-scroll {
     scroll-snap-type: none;
+    /* TV zoom. Standardised CSS `zoom` rather than transform: scale() — it
+       participates in layout, rasterises text at its final size (no blur on the
+       TV), and keeps getBoundingClientRect and pointer clientX/Y in the same
+       coordinate space, which is what makes dnd-kit's hit testing stay correct. */
+    zoom: var(--board-zoom, 1);
+  }
+
+  /* Lane width is a flex-grow weight — either derived from how crowded the lane
+     is or pinned by dragging a divider. basis 0 makes width purely proportional.
+     The floor grows with the column count so a lane can never be dragged too
+     narrow to show the columns it is carrying; LaneResizer reads this computed
+     min-width back out rather than duplicating the arithmetic. */
+  .board-scroll > [data-lane] {
+    flex: var(--lane-grow, 1) 1 0%;
+    min-width: calc(
+      var(--lane-cols, 1) * var(--card-min) + (var(--lane-cols, 1) - 1) * var(--card-gap) +
+        var(--lane-chrome)
+    );
+    /* Deliberately not transitioned. Chromium latches a transition whose value
+       comes from a var() and never re-resolves it, so the lane would freeze at
+       its old width — and animating width while --lane-cols re-flows the grid
+       instantly looks worse than simply snapping to the new layout anyway. */
+  }
+
+  .board-resizing,
+  .board-resizing * {
+    cursor: col-resize;
+    user-select: none;
+  }
+
+  /* Cards wrap into columns so a crowded lane grows sideways instead of
+     scrolling — nobody is at the TV to scroll it. The count is set explicitly
+     rather than with auto-fill: auto-fill packs in as many columns as happen to
+     fit, which fragments a lane of four drivers into two stubby columns purely
+     because the lane is wide. --lane-cols is exactly the number of columns the
+     lane needs, and matches its width weight.
+     align-content: start stops spare lane height being distributed into the
+     rows; align-items: start stops one expanded card stretching the cards beside
+     it (ragged row bottoms are the intended trade-off). */
+  .lane-scroll.lane-grid {
+    display: grid;
+    grid-template-columns: repeat(var(--lane-cols, 1), minmax(0, 1fr));
+    align-content: start;
+    align-items: start;
+  }
+
+  /* The drag ghost renders outside the zoomed board, so it needs the same zoom
+     to match the size of the card it was picked up from. */
+  .overlay-zoom {
+    zoom: var(--board-zoom, 1);
   }
 }
 
