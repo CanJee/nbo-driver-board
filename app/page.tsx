@@ -9,7 +9,10 @@ export default async function Home() {
     .from('drivers')
     .select('*')
     .is('checked_out_at', null)
-    .order('lane_order', { ascending: true });
+    // Matches the client-side refetch in Board: checked_in_at breaks lane_order
+    // ties deterministically so cards can't swap places between loads.
+    .order('lane_order', { ascending: true })
+    .order('checked_in_at', { ascending: true });
 
   const { data: dispatchers } = await supabase
     .from('dispatcher_assignments')
