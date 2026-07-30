@@ -135,13 +135,15 @@ export default function DriverCard({
     ...new Set((shifts ?? [{ shift_type: driver.shift_type }]).map((s) => SHIFT_COLORS[s.shift_type])),
   ];
 
-  // The shift colour now renders as an absolute left bar (supports the split gradient);
-  // unassigned still gets the amber dashed frame on the other 3 sides.
+  // The shift colour renders as an absolute left bar (supports the split gradient),
+  // so the card frame covers the other 3 sides only. Every card gets the same
+  // frame — unassigned is signalled by the amber "Walkie: --" / "Car: --" text,
+  // not by the card outline.
   const containerStyle: React.CSSProperties = {
     borderLeft: 'none',
-    borderTop:    isUnassigned ? '2px dashed var(--status-warn)' : '1px solid var(--edge)',
-    borderRight:  isUnassigned ? '2px dashed var(--status-warn)' : '1px solid var(--edge)',
-    borderBottom: isUnassigned ? '2px dashed var(--status-warn)' : '1px solid var(--edge)',
+    borderTop:    '1px solid var(--edge)',
+    borderRight:  '1px solid var(--edge)',
+    borderBottom: '1px solid var(--edge)',
     borderRadius: '6px',
     backgroundColor: 'var(--surface-card)',
     paddingLeft: '6px',
