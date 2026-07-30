@@ -327,38 +327,43 @@ export default function DriverCard({
             </div>
           )}
 
-          {/* Location Status */}
-          {!isUnassigned && (
-            <div className="mb-3">
-              <div className="text-[10px] font-bold tracking-widest uppercase text-fg-faint mb-1.5">
-                Location Status
-              </div>
-              <div className="flex gap-1.5">
-                <button
-                  onClick={() => onSetLocationStatus(driver, driver.location_status === 'en_route' ? null : 'en_route')}
-                  className="flex-1 py-1.5 rounded text-[11px] font-bold transition-colors"
-                  style={
-                    driver.location_status === 'en_route'
-                      ? { backgroundColor: 'var(--status-warn-strong-bg)', color: 'var(--status-warn-fg)', border: '1px solid #B45309' }
-                      : { backgroundColor: 'var(--surface-card)', color: 'var(--fg-faint)', border: '1px solid var(--edge)' }
-                  }
-                >
-                  → En Route
-                </button>
-                <button
-                  onClick={() => onSetLocationStatus(driver, driver.location_status === 'at_location' ? null : 'at_location')}
-                  className="flex-1 py-1.5 rounded text-[11px] font-bold transition-colors"
-                  style={
-                    driver.location_status === 'at_location'
-                      ? { backgroundColor: 'var(--status-success-strong-bg)', color: 'var(--status-success-bright)', border: '1px solid var(--status-success)' }
-                      : { backgroundColor: 'var(--surface-card)', color: 'var(--fg-faint)', border: '1px solid var(--edge)' }
-                  }
-                >
-                  ✓ At Location
-                </button>
-              </div>
+          {/* Location Status — shown for every driver, including unassigned ones.
+              Where a driver is has nothing to do with whether they have been
+              handed a walkie or a car, and equipment is optional at check-in
+              ("can assign later"), so gating this on assignment left the common
+              just-checked-in case with no way to set en route / at location.
+              The collapsed card already renders the badge ungated, so hiding
+              only the control could also strand a card showing EN ROUTE with no
+              way to clear it. */}
+          <div className="mb-3">
+            <div className="text-[10px] font-bold tracking-widest uppercase text-fg-faint mb-1.5">
+              Location Status
             </div>
-          )}
+            <div className="flex gap-1.5">
+              <button
+                onClick={() => onSetLocationStatus(driver, driver.location_status === 'en_route' ? null : 'en_route')}
+                className="flex-1 py-1.5 rounded text-[11px] font-bold transition-colors"
+                style={
+                  driver.location_status === 'en_route'
+                    ? { backgroundColor: 'var(--status-warn-strong-bg)', color: 'var(--status-warn-fg)', border: '1px solid #B45309' }
+                    : { backgroundColor: 'var(--surface-card)', color: 'var(--fg-faint)', border: '1px solid var(--edge)' }
+                }
+              >
+                → En Route
+              </button>
+              <button
+                onClick={() => onSetLocationStatus(driver, driver.location_status === 'at_location' ? null : 'at_location')}
+                className="flex-1 py-1.5 rounded text-[11px] font-bold transition-colors"
+                style={
+                  driver.location_status === 'at_location'
+                    ? { backgroundColor: 'var(--status-success-strong-bg)', color: 'var(--status-success-bright)', border: '1px solid var(--status-success)' }
+                    : { backgroundColor: 'var(--surface-card)', color: 'var(--fg-faint)', border: '1px solid var(--edge)' }
+                }
+              >
+                ✓ At Location
+              </button>
+            </div>
+          </div>
 
           {/* Away Status */}
           <div className="mb-3">
