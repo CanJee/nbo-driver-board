@@ -89,6 +89,21 @@ function nextLaneOrder(list: Driver[], lane: LaneId): number {
   return list.reduce((max, d) => (d.lane === lane ? Math.max(max, d.lane_order) : max), -1) + 1;
 }
 
+/**
+ * Marks one card as having entered its lane just now — for display only.
+ *
+ * The authoritative lane_entered_at is written by a database trigger on any real
+ * lane change; we never send that column. But the dispatcher who made the move
+ * can't rely on a refetch to pick it up, because handleDragEnd holds the
+ * realtime guard shut across its own writes. Without this their card would keep
+ * counting up from the *previous* lane until the next change from anyone at all.
+ * A slightly-off client clock only shows here, and only until that refetch.
+ */
+function stampLaneEntry(list: Driver[], id: string): Driver[] {
+  const at = new Date().toISOString();
+  return list.map((d) => (d.id === id ? { ...d, lane_entered_at: at } : d));
+}
+
 /** Renumbers lane_order to a dense 0..n-1 in the given lanes, keeping their order. */
 function renumberLanes(list: Driver[], lanes: LaneId[]): Driver[] {
   const order = new Map<string, number>();
@@ -480,7 +495,12 @@ export default function Board({ initialDrivers, initialDispatchers }: BoardProps
 
     // Both lanes end up densely numbered — the target already is, and the source
     // lane needs it in case the card wandered through other lanes on the way.
-    const updatedDrivers = renumberLanes(placed, [sourceLane, targetLane]);
+    const renumbered = renumberLanes(placed, [sourceLane, targetLane]);
+
+    // Only a real lane change restarts the timer, matching the DB trigger. A
+    // card dragged out and back before the drop lands on sourceLane === targetLane
+    // here and writes its original lane, so neither side resets it.
+    const updatedDrivers = crossLane ? stampLaneEntry(renumbered, activeId) : renumbered;
 
     setDrivers(updatedDrivers);
 
@@ -568,7 +588,10 @@ export default function Board({ initialDrivers, initialDispatchers }: BoardProps
     // ordering are harmless (order is only used relatively).
     const nextOrder = nextLaneOrder(drivers, lane);
     setDrivers((prev) =>
-      prev.map((d) => (d.id === driver.id ? { ...d, lane, lane_order: nextOrder } : d))
+      stampLaneEntry(
+        prev.map((d) => (d.id === driver.id ? { ...d, lane, lane_order: nextOrder } : d)),
+        driver.id
+      )
     );
     await supabase
       .from('drivers')

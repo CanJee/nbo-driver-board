@@ -13,6 +13,37 @@ export function getTournamentDate(now: Date = new Date()): string {
   }).format(now);
 }
 
+/**
+ * Elapsed milliseconds → "<1m", "47m", "1h 05m".
+ *
+ * Clamped at zero: the elapsed time is measured against the *browser's* clock
+ * while the stamp comes from the database's, so a dispatcher device running a
+ * little behind would otherwise render a negative duration right after a move.
+ */
+export function formatDurationShort(ms: number): string {
+  const mins = Math.max(0, Math.floor(ms / 60_000));
+  if (mins < 1) return '<1m';
+  if (mins < 60) return `${mins}m`;
+  return `${Math.floor(mins / 60)}h ${String(mins % 60).padStart(2, '0')}m`;
+}
+
+/**
+ * An ISO timestamp → "14:15" in the tournament timezone. Empty string on bad data.
+ *
+ * Same 24-hour format as the board's LiveClock, so "since 14:15" can be read
+ * straight against the clock in the header.
+ */
+export function formatClockTime(iso: string): string {
+  const dt = new Date(iso);
+  if (Number.isNaN(dt.getTime())) return '';
+  return dt.toLocaleTimeString('en-CA', {
+    timeZone: TOURNAMENT_TZ,
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  });
+}
+
 /** A `YYYY-MM-DD` string → "Friday, July 31, 2026". Returns the input on bad data. */
 export function formatRosterDate(ymd: string): string {
   const [y, m, d] = ymd.split('-').map(Number);
