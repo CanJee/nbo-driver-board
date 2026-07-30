@@ -48,6 +48,14 @@ const SHIFTS = [
 const ROLES = ['Fleet Driver', 'Airport Greeter', 'Player Shuttle', 'Support Driver'];
 const AWAY_REASONS = ['gas', 'carwash', 'practice', 'parking'];
 
+/**
+ * A spread of "entered this lane N minutes ago" stamps, so the expanded card's
+ * time-in-lane readout has something to show on a fresh preview instead of a
+ * board where every card says "<1m". Covers all three formats: under a minute,
+ * minutes, and hours. Deterministic so redeploys don't churn the numbers.
+ */
+const LANE_MINUTES_AGO = [0, 4, 18, 47, 96, 152, 213];
+
 /** One synthetic driver row. `i` is its index within the lane, and drives the variety. */
 function makeDriver(lane, i, laneOrder) {
   const shift = SHIFTS[i % SHIFTS.length];
@@ -84,6 +92,9 @@ function makeDriver(lane, i, laneOrder) {
     away_reason: away ? AWAY_REASONS[i % AWAY_REASONS.length] : null,
     lane,
     lane_order: laneOrder,
+    lane_entered_at: new Date(
+      Date.now() - LANE_MINUTES_AGO[i % LANE_MINUTES_AGO.length] * 60_000
+    ).toISOString(),
     notes: i % 9 === 8 ? 'Preview seed note — safe to edit.' : null,
   };
 }

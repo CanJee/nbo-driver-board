@@ -5,10 +5,55 @@ import { ChevronUp, GripVertical, Pencil, Save, X } from 'lucide-react';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { AwayReason, Driver, LaneId, LocationStatus, MAIN_LANES, SHIFT_COLORS, SHIFT_LABELS, LANE_LABELS, AWAY_ICONS, AWAY_LABELS } from '@/lib/types';
+import { formatClockTime, formatDurationShort } from '@/lib/date';
 import { SearchMatchField } from '@/lib/search';
 
 // Same lane set the board renders — targets for the mobile "Move to" buttons.
 const MOVE_LANES: LaneId[] = [...MAIN_LANES, 'meals'];
+
+// Minute-granularity display, so re-rendering twice a minute is enough to keep
+// it honest. The component only exists while a card is expanded.
+const LANE_TIMER_TICK_MS = 30_000;
+
+/**
+ * How long the driver has been in their current lane: "47m · since 14:15".
+ *
+ * Applies to every lane — meals is just the case dispatchers asked about first.
+ * Renders nothing when the stamp is missing or unparseable, which is what lets
+ * the UI ship before the migration has been run against prod.
+ */
+function TimeInLane({ driver }: { driver: Driver }) {
+  // Elapsed time depends on the client clock, so there is no correct value to
+  // render on the server. Staying null until mounted keeps the first client
+  // render identical to the server's (the guard LiveClock and ThemeToggle use).
+  const [now, setNow] = useState<number | null>(null);
+
+  useEffect(() => {
+    const update = () => setNow(Date.now());
+    update();
+    const id = setInterval(update, LANE_TIMER_TICK_MS);
+    return () => clearInterval(id);
+  }, []);
+
+  if (now === null || !driver.lane_entered_at) return null;
+  const entered = Date.parse(driver.lane_entered_at);
+  if (Number.isNaN(entered)) return null;
+
+  return (
+    <div className="mb-3">
+      <div className="text-[10px] font-bold tracking-widest uppercase text-fg-faint mb-1.5">
+        In {LANE_LABELS[driver.lane]}
+      </div>
+      <div className="text-sm text-fg-soft">
+        <span className="text-fg-strong font-medium tabular-nums">
+          {formatDurationShort(now - entered)}
+        </span>
+        {' · since '}
+        <span className="tabular-nums">{formatClockTime(driver.lane_entered_at)}</span>
+      </div>
+    </div>
+  );
+}
 
 /** Build the left bar: solid for one shift, an evenly-split hard-stop gradient for multiple. */
 function shiftBarBackground(colors: string[]): string {
@@ -230,6 +275,9 @@ export default function DriverCard({
               <ChevronUp size={16} />
             </button>
           </div>
+
+          {/* Time in the current lane */}
+          <TimeInLane driver={driver} />
 
           {/* Walkie / Car / Phone */}
           <div className="mb-3 space-y-1">

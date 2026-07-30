@@ -45,6 +45,10 @@ export interface Driver {
   notes: string | null;
   checked_in_at: string;
   checked_out_at: string | null;
+  // When they entered their current lane — reset by a DB trigger on every lane
+  // change (see supabase/migrations/*_lane_entered_at.sql), never written by the
+  // client. Nullable because prod serves rows without it until that SQL is run.
+  lane_entered_at: string | null;
 }
 
 /** A single assignment row from an imported daily roster. */
