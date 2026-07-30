@@ -76,6 +76,19 @@ type LaneLayout = Record<LaneId, { cols: number; rows: number }>;
 
 const byLaneOrder = (a: Driver, b: Driver) => a.lane_order - b.lane_order;
 
+/**
+ * The lane_order that puts a driver at the *bottom* of a lane.
+ *
+ * Derived from the highest existing order, never from the count: lane_order is
+ * only dense right after a drag (renumberLanes), and every mid-lane check-out or
+ * tap-move leaves a permanent hole. A count would then collide with a driver
+ * already in the lane and the new card would sort into the middle of the queue —
+ * on a wrapped multi-column lane, partway up a column where nobody looks for it.
+ */
+function nextLaneOrder(list: Driver[], lane: LaneId): number {
+  return list.reduce((max, d) => (d.lane === lane ? Math.max(max, d.lane_order) : max), -1) + 1;
+}
+
 /** Renumbers lane_order to a dense 0..n-1 in the given lanes, keeping their order. */
 function renumberLanes(list: Driver[], lanes: LaneId[]): Driver[] {
   const order = new Map<string, number>();
@@ -521,7 +534,7 @@ export default function Board({ initialDrivers, initialDispatchers }: BoardProps
     if (driver.lane === lane) return;
     // Append at the end of the target lane; gaps left in the source lane's
     // ordering are harmless (order is only used relatively).
-    const nextOrder = drivers.filter((d) => d.lane === lane).length;
+    const nextOrder = nextLaneOrder(drivers, lane);
     setDrivers((prev) =>
       prev.map((d) => (d.id === driver.id ? { ...d, lane, lane_order: nextOrder } : d))
     );
@@ -548,8 +561,8 @@ export default function Board({ initialDrivers, initialDispatchers }: BoardProps
 
   // ── CHECK IN ──
   const handleCheckIn = async (data: CheckInData) => {
-    const laneDrivers = drivers.filter((d) => d.lane === data.lane);
-    const nextOrder = laneDrivers.length;
+    // A fresh arrival always joins the back of the queue.
+    const nextOrder = nextLaneOrder(drivers, data.lane);
 
     const { error } = await supabase.from('drivers').insert({
       roster_id: data.rosterId,
