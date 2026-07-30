@@ -1,10 +1,11 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { ChevronUp, GripVertical, Pencil, Save, X } from 'lucide-react';
+import { Check, ChevronUp, Copy, GripVertical, Pencil, Save, X } from 'lucide-react';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { AwayReason, Driver, LaneId, LocationStatus, MAIN_LANES, SHIFT_COLORS, SHIFT_LABELS, LANE_LABELS, AWAY_ICONS, AWAY_LABELS } from '@/lib/types';
+import { copyToClipboard } from '@/lib/clipboard';
 import { formatClockTime, formatDurationShort } from '@/lib/date';
 import { SearchMatchField } from '@/lib/search';
 
@@ -14,6 +15,82 @@ const MOVE_LANES: LaneId[] = [...MAIN_LANES, 'meals'];
 // Minute-granularity display, so re-rendering twice a minute is enough to keep
 // it honest. The component only exists while a card is expanded.
 const LANE_TIMER_TICK_MS = 30_000;
+
+// How long the "Copied" / "Copy failed" confirmation stays up after a tap.
+const COPY_FEEDBACK_MS = 1600;
+
+/**
+ * The driver's phone number, tap-to-copy.
+ *
+ * Cards are `select-none` (so dragging never starts a text selection), which
+ * leaves no way to get a number off the board by hand — dispatchers were
+ * re-typing it into a dialer. The number itself is the button; the icon is
+ * there to make that affordance visible, since a bare number doesn't look
+ * tappable.
+ */
+function CopyablePhone({ phone }: { phone: string }) {
+  const [state, setState] = useState<'idle' | 'copied' | 'failed'>('idle');
+
+  // Clear the confirmation on a timer. Cleanup covers the card being collapsed
+  // mid-countdown, which unmounts this along with the rest of the expanded view.
+  useEffect(() => {
+    if (state === 'idle') return;
+    const id = setTimeout(() => setState('idle'), COPY_FEEDBACK_MS);
+    return () => clearTimeout(id);
+  }, [state]);
+
+  if (!phone) {
+    return (
+      <div className="text-sm text-fg-muted">
+        Phone: <span className="text-fg-bright">—</span>
+      </div>
+    );
+  }
+
+  const handleCopy = async () => {
+    // Drop back to idle first so a repeat tap restarts the timer instead of
+    // re-setting the same state (which React would skip, leaving the old one).
+    setState('idle');
+    setState((await copyToClipboard(phone)) ? 'copied' : 'failed');
+  };
+
+  const copied = state === 'copied';
+
+  return (
+    <div className="text-sm text-fg-muted flex items-center gap-1.5 flex-wrap">
+      <span>Phone:</span>
+      {/* Success is confirmed by swapping the icon and greening the number
+          rather than adding a "Copied" label: the cards are narrow enough that
+          any extra word wraps to its own line and shoves the rest of the card
+          down for the length of the confirmation. Negative margins keep the
+          padded tap target from indenting the row. */}
+      <button
+        onClick={handleCopy}
+        title="Copy phone number"
+        aria-label={`Copy phone number ${phone}`}
+        className="flex items-center gap-1.5 -my-1 -ml-1 px-1 py-1 rounded transition-colors hover:bg-black/5 dark:hover:bg-white/10"
+        style={copied ? { color: 'var(--status-success-bright)' } : undefined}
+      >
+        <span className={`tabular-nums ${copied ? 'font-medium' : 'text-fg-bright'}`}>{phone}</span>
+        {copied ? (
+          <Check size={13} className="flex-shrink-0" />
+        ) : (
+          <Copy size={12} className="text-fg-faint flex-shrink-0" />
+        )}
+      </button>
+      {/* The failure case is rare, and worth the wrap — a silent no-op would
+          leave a dispatcher pasting whatever was on the clipboard before. */}
+      {state === 'failed' && (
+        <span className="text-[11px] font-semibold" style={{ color: 'var(--status-warn-fg)' }}>
+          Copy failed
+        </span>
+      )}
+      <span aria-live="polite" className="sr-only">
+        {copied ? 'Phone number copied' : ''}
+      </span>
+    </div>
+  );
+}
 
 /**
  * How long the driver has been in their current lane: "47m · since 14:15".
@@ -300,9 +377,7 @@ export default function DriverCard({
                 <Pencil size={11} /><span>Edit</span>
               </button>
             </div>
-            <div className="text-sm text-fg-muted">
-              Phone: <span className="text-fg-bright">{driver.phone || '—'}</span>
-            </div>
+            <CopyablePhone phone={driver.phone} />
           </div>
 
           {/* Today's shifts */}
