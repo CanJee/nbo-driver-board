@@ -101,6 +101,59 @@ function renumberLanes(list: Driver[], lanes: LaneId[]): Driver[] {
   return list.map((d) => (order.has(d.id) ? { ...d, lane_order: order.get(d.id) as number } : d));
 }
 
+/**
+ * Where the dragged card belongs given what the pointer is over — the one place
+ * that answers that question, for the mid-drag lane change and for the drop
+ * alike, so the two can never disagree about it.
+ *
+ * `overDriverId` is the card under the pointer, or null when it is over bare lane
+ * background, which means "past the last card". Returns `list` unchanged when
+ * nothing would move.
+ */
+function reorderForDrop(
+  list: Driver[],
+  activeId: string,
+  targetLane: LaneId,
+  overDriverId: string | null
+): Driver[] {
+  const dragged = list.find((d) => d.id === activeId);
+  if (!dragged) return list;
+  const fromLane = dragged.lane as LaneId;
+
+  const lane = list.filter((d) => d.lane === targetLane).sort(byLaneOrder);
+  const oldIndex = lane.findIndex((d) => d.id === activeId);
+  let placed: Driver[];
+
+  if (oldIndex === -1) {
+    // Arriving in a lane the card isn't in yet: it takes the hovered card's slot,
+    // pushing that card and everything after it down.
+    const overIndex = overDriverId ? lane.findIndex((d) => d.id === overDriverId) : -1;
+    const at = overIndex === -1 ? lane.length : overIndex;
+    placed = [...lane.slice(0, at), dragged, ...lane.slice(at)];
+  } else {
+    // Already in this lane — its home lane, or one it was moved into earlier in
+    // the same drag. Either way it is a reorder, and arrayMove is exactly what
+    // dnd-kit's sortable preview has been showing (the hovered card's slot going
+    // up, just past it going down), so the indices have to come from the lane
+    // *including* the dragged card for the drop to match the preview.
+    const newIndex = overDriverId ? lane.findIndex((d) => d.id === overDriverId) : lane.length - 1;
+    if (newIndex === -1 || newIndex === oldIndex) return list;
+    placed = arrayMove(lane, oldIndex, newIndex);
+  }
+
+  const orders = new Map(placed.map((d, i) => [d.id, i]));
+  const next = list.map((d) => {
+    if (d.id === activeId) {
+      return { ...d, lane: targetLane, lane_order: orders.get(d.id) as number };
+    }
+    return orders.has(d.id) ? { ...d, lane_order: orders.get(d.id) as number } : d;
+  });
+
+  // Close the gap in whatever lane the card just came from. Harmless when it is
+  // the same lane (already renumbered above).
+  return fromLane === targetLane ? next : renumberLanes(next, [fromLane]);
+}
+
 export default function Board({ initialDrivers, initialDispatchers }: BoardProps) {
   const [drivers, setDrivers] = useState<Driver[]>(initialDrivers);
   const [dispatchers, setDispatchers] = useState<DispatcherAssignment[]>(initialDispatchers);
@@ -369,33 +422,22 @@ export default function Board({ initialDrivers, initialDispatchers }: BoardProps
     const isOverLane = (ALL_LANES as string[]).includes(overId);
     const overDriver = !isOverLane ? drivers.find((d) => d.id === overId) : null;
     const targetLane = (isOverLane ? overId : overDriver?.lane) as LaneId | undefined;
+    if (!targetLane) return;
 
-    if (!targetLane || draggedDriver.lane === targetLane) return;
+    // Only a genuine lane change moves the card here. Once it is in the lane, it
+    // joins that lane's SortableContext and dnd-kit previews any further reorder
+    // with transforms — the same machinery that has always driven within-lane
+    // drags — while handleDragEnd derives the committed index from `over`.
+    //
+    // Reordering within the lane on every dragOver instead does NOT work: it
+    // relayouts the cards, which moves the very rects dnd-kit hit-tests against,
+    // so hovering one card can flip the insert point between "before" and "after"
+    // it on alternating events and never settle (React bails out with "Maximum
+    // update depth exceeded"). Moving once per lane change keeps the pointer →
+    // `over` mapping stable for the rest of the drag.
+    if (draggedDriver.lane === targetLane) return;
 
-    // Optimistically move the card into the target lane at the hovered position,
-    // so the live preview matches where the drop will actually put it.
-    setDrivers((prev) => {
-      const target = prev.filter((d) => d.lane === targetLane).sort(byLaneOrder);
-      const overIndex = overDriver ? target.findIndex((d) => d.id === overId) : -1;
-      const insertAt = overIndex === -1 ? target.length : overIndex;
-
-      const placed = [
-        ...target.slice(0, insertAt),
-        { ...draggedDriver, lane: targetLane },
-        ...target.slice(insertAt),
-      ];
-      const orders = new Map(placed.map((d, i) => [d.id, i]));
-
-      // The source lane keeps its old numbering (now with a gap, which is
-      // harmless — order is only ever read relatively); handleDragEnd renumbers
-      // both lanes densely before persisting.
-      return prev.map((d) => {
-        if (d.id === activeId) {
-          return { ...d, lane: targetLane, lane_order: orders.get(d.id) as number };
-        }
-        return orders.has(d.id) ? { ...d, lane_order: orders.get(d.id) as number } : d;
-      });
-    });
+    setDrivers((prev) => reorderForDrop(prev, activeId, targetLane, overDriver ? overId : null));
   };
 
   // ── DRAG END ──
@@ -425,30 +467,20 @@ export default function Board({ initialDrivers, initialDispatchers }: BoardProps
     const targetLane = (isOverLane ? overId : overDriver?.lane) as LaneId;
     if (!targetLane) return releaseGuard();
 
-    let updatedDrivers: Driver[];
+    // The release point decides the final position, cross-lane exactly as much as
+    // within-lane. Re-deriving it here from `over` rather than trusting the order
+    // handleDragOver left behind also makes the drop immune to a mouse-up that
+    // beats the last preview render to the finish line.
+    const placed = reorderForDrop(drivers, activeId, targetLane, overDriver ? overId : null);
+    const crossLane = sourceLane !== targetLane;
 
-    if (sourceLane === targetLane) {
-      // Within-lane reorder. Indices must come from driversInLane — the order
-      // actually on screen — or the drop lands somewhere the dispatcher didn't aim.
-      const laneDrivers = driversInLane(sourceLane);
-      const oldIndex = laneDrivers.findIndex((d) => d.id === activeId);
-      const newIndex = overDriver
-        ? laneDrivers.findIndex((d) => d.id === overId)
-        : laneDrivers.length - 1;
+    // A within-lane drop that changed nothing needs no write. A cross-lane one
+    // always does, even when handleDragOver already previewed this exact order.
+    if (placed === drivers && !crossLane) return releaseGuard();
 
-      if (oldIndex === -1 || newIndex === -1 || oldIndex === newIndex) return releaseGuard();
-
-      const reordered = arrayMove(laneDrivers, oldIndex, newIndex).map((d, i) => ({
-        ...d,
-        lane_order: i,
-      }));
-      const byId = new Map(reordered.map((d) => [d.id, d]));
-      updatedDrivers = drivers.map((d) => byId.get(d.id) ?? d);
-    } else {
-      // Cross-lane move — handleDragOver already placed the card, so just close
-      // the gap it left behind in the source lane.
-      updatedDrivers = renumberLanes(drivers, [sourceLane, targetLane]);
-    }
+    // Both lanes end up densely numbered — the target already is, and the source
+    // lane needs it in case the card wandered through other lanes on the way.
+    const updatedDrivers = renumberLanes(placed, [sourceLane, targetLane]);
 
     setDrivers(updatedDrivers);
 

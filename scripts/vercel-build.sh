@@ -20,5 +20,10 @@ node scripts/clone-prod-to-preview.mjs
 # of the Data-API clone). Self-skips on non-preview / when no preview password is set.
 node scripts/seed-preview-user.mjs
 
+# Top the preview board up to a testable size — between tournament days prod can be
+# nearly empty, and the crowded-lane behaviours (column wrapping, cross-lane drops)
+# need a full lane to exercise. Self-skips on non-preview / once already seeded.
+node scripts/seed-preview-drivers.mjs
+
 # Build the app.
 ./node_modules/.bin/next build
