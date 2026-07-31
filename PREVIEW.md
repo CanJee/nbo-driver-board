@@ -27,7 +27,7 @@ live prod. (Production deploys are unchanged: they use the prod project.)
    up to a minimum with synthetic drivers (surname `Testcase`), because between tournament
    days the cloned prod data can be nearly empty — and the crowded-lane behaviours (cards
    wrapping into columns, lane reweighting, cross-lane drag and drop) need a full lane to
-   exercise. `meals` is left empty on purpose so there's always an empty lane to drag into.
+   exercise. `other` is left empty on purpose so there's always an empty lane to drag into.
    Idempotent: once those drivers exist it never adds more, so redeploys can't compound
    them after you've dragged cards around. Delete them in the preview DB to test against
    prod data alone.

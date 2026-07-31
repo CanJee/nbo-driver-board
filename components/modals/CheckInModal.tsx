@@ -63,8 +63,6 @@ interface ShiftDraft {
   scheduled: boolean;
 }
 
-const ALL_CHECKIN_LANES: LaneId[] = [...MAIN_LANES, 'meals'];
-
 const groupKey = (name: string, phone: string) =>
   `${normalizeName(name).toLowerCase()}|${phone.trim()}`;
 
@@ -484,8 +482,9 @@ export default function CheckInModal({ activeDrivers, onConfirm, onCancel }: Che
               style={{ color: 'var(--brand)' }}>
               3 · Starting Lane
             </label>
+            {/* MAIN_LANES is the same set the board renders as columns. */}
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-              {ALL_CHECKIN_LANES.map((l) => (
+              {MAIN_LANES.map((l) => (
                 <button
                   key={l}
                   type="button"

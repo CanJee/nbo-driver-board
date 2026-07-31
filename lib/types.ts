@@ -4,7 +4,7 @@ export type DriverStatus = 'unassigned' | 'assigned' | 'away';
 
 export type LocationStatus = 'at_location' | 'en_route';
 
-export type AwayReason = 'gas' | 'carwash' | 'practice' | 'parking' | 'uptown_shuttle';
+export type AwayReason = 'gas' | 'carwash' | 'practice' | 'parking' | 'meals';
 
 export type LaneId =
   | 'tennis_centre'
@@ -14,6 +14,9 @@ export type LaneId =
   | 'downtown_hotel'
   | 'airport'
   | 'other'
+  // Meals is an away status now, not a place drivers get parked (see AWAY_ICONS).
+  // Kept as a valid lane purely so rows and roster entries written before that
+  // change still resolve to a label instead of rendering "undefined".
   | 'meals';
 
 /** One scheduled shift for a driver on a given day (a single roster assignment). */
@@ -98,13 +101,13 @@ export const FLEET_DRIVER_ROLE = 'Fleet Driver';
 
 // Order here is the order of the buttons on the card — keep the three maps below
 // in step, and remember the away_reason CHECK constraint in the database has to
-// allow any key added here (see supabase/migrations/*_uptown_shuttle_away.sql).
+// allow any key added here (see supabase/migrations/*_meals_away_reason.sql).
 export const AWAY_ICONS: Record<AwayReason, string> = {
   gas: '⛽',
   carwash: '🧼',
   practice: '🎾',
   parking: '🚐',
-  uptown_shuttle: '🏨',
+  meals: '🍽️',
 };
 
 export const AWAY_LABELS: Record<AwayReason, string> = {
@@ -112,7 +115,7 @@ export const AWAY_LABELS: Record<AwayReason, string> = {
   carwash: 'Car Wash',
   practice: 'Practice Courts',
   parking: 'Parking Lot Shuttle',
-  uptown_shuttle: 'Uptown Shuttle',
+  meals: 'Meal Break',
 };
 
 /** One-word captions under the away buttons — the full labels are too wide to fit
@@ -124,11 +127,13 @@ export const AWAY_SHORT_LABELS: Record<AwayReason, string> = {
   carwash: 'Car',
   practice: 'Practice',
   parking: 'Parking',
-  uptown_shuttle: 'Uptown',
+  meals: 'Meals',
 };
 
-// Board columns + check-in lane options (with `meals` appended in the UI).
-// `downtown_hotel` is intentionally omitted for 2026 — re-add it here to restore the column.
+// The board's columns, and the lane options at check-in and on a card's "Move To".
+// `downtown_hotel` is intentionally omitted for 2026 — re-add it here to restore the
+// column. `meals` was a column until drivers on a meal break became an away status
+// instead, which keeps them in the lane they will come back to.
 export const MAIN_LANES: LaneId[] = [
   'tennis_centre',
   'uptown_hotel',

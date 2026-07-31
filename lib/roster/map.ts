@@ -30,7 +30,9 @@ const LANE_KEYWORDS: [RegExp, LaneId][] = [
   // `downtown` intentionally unmapped for 2026 (no downtown hotel) — such rows fall
   // through to the "Other" lane with a warning. Restore this line to re-enable it.
   [/airport/i, 'airport'],
-  [/meal/i, 'meals'],
+  // `meal` is intentionally unmapped: a meal break is an away status now, not a
+  // lane, and the Meals column is gone — mapping to it would check people in to a
+  // lane the board no longer draws. Such rows fall through to "Other" instead.
 ];
 
 export function mapLane(sourceLocation: string, role = ''): LaneId | null {

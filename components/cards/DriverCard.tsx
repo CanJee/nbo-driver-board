@@ -9,9 +9,6 @@ import { copyToClipboard } from '@/lib/clipboard';
 import { formatClockTime, formatDurationShort } from '@/lib/date';
 import { SearchMatchField } from '@/lib/search';
 
-// Same lane set the board renders — targets for the mobile "Move to" buttons.
-const MOVE_LANES: LaneId[] = [...MAIN_LANES, 'meals'];
-
 // Minute-granularity display, so re-rendering twice a minute is enough to keep
 // it honest. The component only exists while a card is expanded.
 const LANE_TIMER_TICK_MS = 30_000;
@@ -95,7 +92,8 @@ function CopyablePhone({ phone }: { phone: string }) {
 /**
  * How long the driver has been in their current lane: "47m · since 14:15".
  *
- * Applies to every lane — meals is just the case dispatchers asked about first.
+ * Applies to every lane, so a dispatcher can see at a glance who has been sitting
+ * in one the longest and is next out.
  * Renders nothing when the stamp is missing or unparseable, which is what lets
  * the UI ship before the migration has been run against prod.
  */
@@ -500,7 +498,8 @@ export default function DriverCard({
               Move To
             </div>
             <div className="flex flex-wrap gap-1.5">
-              {MOVE_LANES.filter((l) => l !== driver.lane).map((l) => (
+              {/* MAIN_LANES is the same set the board renders as columns. */}
+              {MAIN_LANES.filter((l) => l !== driver.lane).map((l) => (
                 <button
                   key={l}
                   onClick={() => onMoveToLane(driver, l)}

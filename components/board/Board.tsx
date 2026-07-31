@@ -57,8 +57,6 @@ interface BoardProps {
   initialDispatchers: DispatcherAssignment[];
 }
 
-const ALL_LANES: LaneId[] = [...MAIN_LANES, 'meals'];
-
 // Rough size of one collapsed card row (min-h-[60px] + borders) and the gap
 // between cards — used only to estimate how many cards fit in a lane column.
 const CARD_ROW_PX = 62;
@@ -89,7 +87,7 @@ function rootPx(name: string, fallback: number): number {
  * Lanes are flex items with a min-width of (cols × --card-min + gaps + chrome),
  * so once the lanes' minimums add up to more than the board, flex can't shrink
  * them any further and the board scrolls sideways — which on a dispatch TV means
- * a whole lane (Meals, the last one) is simply not on screen, with nobody there
+ * a whole lane (the last one, Other) is simply not on screen, with nobody there
  * to scroll to it. Capping the total column count is what stops that happening.
  */
 function columnBudget(boardWidthPx: number, laneCount: number): number {
@@ -282,7 +280,7 @@ export default function Board({ initialDrivers, initialDispatchers }: BoardProps
   // render agree on the defaults (same mount guard ThemeToggle uses).
   useEffect(() => {
     setZoom(loadZoom());
-    setLaneWidths(loadLaneWidths(ALL_LANES));
+    setLaneWidths(loadLaneWidths(MAIN_LANES));
   }, []);
 
   // Lanes are equal-height flex siblings, so one lane's list height tells us how
@@ -300,7 +298,7 @@ export default function Board({ initialDrivers, initialDispatchers }: BoardProps
     const measure = () => {
       const contentH = list.clientHeight - LANE_LIST_PADDING_PX;
       setRowsPerCol(Math.max(1, Math.floor((contentH + CARD_GAP_PX) / (CARD_ROW_PX + CARD_GAP_PX))));
-      setColBudget(columnBudget(board.clientWidth, ALL_LANES.length));
+      setColBudget(columnBudget(board.clientWidth, MAIN_LANES.length));
     };
     measure();
     const ro = new ResizeObserver(measure);
@@ -411,7 +409,7 @@ export default function Board({ initialDrivers, initialDispatchers }: BoardProps
     const frozen = activeDriver ? frozenLayoutRef.current : null;
     const counts = {} as Record<LaneId, number>;
     const cols = {} as Record<LaneId, number>;
-    for (const lane of ALL_LANES) {
+    for (const lane of MAIN_LANES) {
       counts[lane] = drivers.filter((d) => d.lane === lane).length;
       cols[lane] =
         frozen?.[lane].cols ??
@@ -425,9 +423,9 @@ export default function Board({ initialDrivers, initialDispatchers }: BoardProps
     // the shortest per column, so it is the one that loses the least by giving
     // one up (ties go to the emptier lane). Every lane keeps its last column.
     if (!frozen) {
-      let total = ALL_LANES.reduce((n, lane) => n + cols[lane], 0);
+      let total = MAIN_LANES.reduce((n, lane) => n + cols[lane], 0);
       while (total > colBudget) {
-        const victim = ALL_LANES.reduce((worst, lane) =>
+        const victim = MAIN_LANES.reduce((worst, lane) =>
           cols[lane] > cols[worst] ||
           (cols[lane] === cols[worst] && counts[lane] < counts[worst])
             ? lane
@@ -440,7 +438,7 @@ export default function Board({ initialDrivers, initialDispatchers }: BoardProps
     }
 
     const next = {} as LaneLayout;
-    for (const lane of ALL_LANES) {
+    for (const lane of MAIN_LANES) {
       const rows = Math.max(frozen?.[lane].rows ?? 1, Math.ceil(counts[lane] / cols[lane]), 1);
       next[lane] = { cols: cols[lane], rows };
     }
@@ -451,7 +449,7 @@ export default function Board({ initialDrivers, initialDispatchers }: BoardProps
   // A lane is exactly as wide as the number of columns it is showing.
   const autoGrows = useMemo<LaneGrows>(() => {
     const g: LaneGrows = {};
-    for (const lane of ALL_LANES) g[lane] = laneLayout[lane].cols;
+    for (const lane of MAIN_LANES) g[lane] = laneLayout[lane].cols;
     return g;
   }, [laneLayout]);
 
@@ -495,7 +493,7 @@ export default function Board({ initialDrivers, initialDispatchers }: BoardProps
     const draggedDriver = drivers.find((d) => d.id === activeId);
     if (!draggedDriver) return;
 
-    const isOverLane = (ALL_LANES as string[]).includes(overId);
+    const isOverLane = (MAIN_LANES as string[]).includes(overId);
     const overDriver = !isOverLane ? drivers.find((d) => d.id === overId) : null;
     const targetLane = (isOverLane ? overId : overDriver?.lane) as LaneId | undefined;
     if (!targetLane) return;
@@ -538,7 +536,7 @@ export default function Board({ initialDrivers, initialDispatchers }: BoardProps
     const draggedDriver = drivers.find((d) => d.id === activeId);
     if (!draggedDriver) return releaseGuard();
 
-    const isOverLane = (ALL_LANES as string[]).includes(overId);
+    const isOverLane = (MAIN_LANES as string[]).includes(overId);
     const overDriver = !isOverLane ? drivers.find((d) => d.id === overId) : null;
     const targetLane = (isOverLane ? overId : overDriver?.lane) as LaneId;
     if (!targetLane) return releaseGuard();
@@ -797,11 +795,11 @@ export default function Board({ initialDrivers, initialDispatchers }: BoardProps
 
         {/* Lane switcher — phones/tablets only */}
         <LaneTabs
-          lanes={ALL_LANES}
-          counts={ALL_LANES.map((l) => driversInLane(l).length)}
+          lanes={MAIN_LANES}
+          counts={MAIN_LANES.map((l) => driversInLane(l).length)}
           matchCounts={
             search
-              ? ALL_LANES.map((l) => driversInLane(l).filter((d) => searchMatches.has(d.id)).length)
+              ? MAIN_LANES.map((l) => driversInLane(l).filter((d) => searchMatches.has(d.id)).length)
               : undefined
           }
           activeIdx={activeLaneIdx}
@@ -836,11 +834,11 @@ export default function Board({ initialDrivers, initialDispatchers }: BoardProps
             activeDriver ? 'board-dragging' : ''
           } ${isResizing ? 'board-resizing' : ''}`}
         >
-          {ALL_LANES.map((laneId, i) => (
+          {MAIN_LANES.map((laneId, i) => (
             <Fragment key={laneId}>
               {i > 0 && (
                 <LaneResizer
-                  leftLane={ALL_LANES[i - 1]}
+                  leftLane={MAIN_LANES[i - 1]}
                   rightLane={laneId}
                   grows={effectiveGrows}
                   zoom={zoom}

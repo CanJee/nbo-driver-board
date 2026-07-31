@@ -23,13 +23,13 @@ const MARKER = 'Testcase';
 
 // Enough per lane to exercise the crowded-lane layout on a 1080p TV, where a lane
 // column holds roughly a dozen cards: tennis_centre wraps to 3 columns (the
-// MAX_LANE_COLS cap), uptown_hotel to 2, and the rest stay single-column. `meals`
-// is deliberately absent so there is always an empty lane to drag into.
+// MAX_LANE_COLS cap), uptown_hotel to 2, and airport stays single-column. `other`
+// is deliberately absent so there is always an empty lane to drag into — a drop on
+// bare lane background is its own code path, and the Meals lane used to cover it.
 const MIN_PER_LANE = {
   tennis_centre: 26,
   uptown_hotel: 14,
   airport: 7,
-  other: 4,
 };
 
 const FIRST_NAMES = [

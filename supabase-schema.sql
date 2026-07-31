@@ -24,7 +24,9 @@ CREATE TABLE IF NOT EXISTS drivers (
   walkie_number TEXT,
   car_number TEXT,
   status TEXT NOT NULL DEFAULT 'assigned' CHECK (status IN ('unassigned', 'assigned', 'away')),
-  away_reason TEXT CHECK (away_reason IN ('gas', 'carwash', 'practice', 'parking', 'uptown_shuttle')),
+  away_reason TEXT CHECK (away_reason IN ('gas', 'carwash', 'practice', 'parking', 'meals')),
+  -- 'meals' is still a legal lane so pre-2026-07-31 rows read back, but it is no
+  -- longer a column on the board — a meal break is an away_reason now.
   lane TEXT NOT NULL DEFAULT 'tennis_centre' CHECK (lane IN ('tennis_centre', 'uptown_hotel', 'downtown_hotel', 'airport', 'other', 'meals')),
   lane_order INTEGER NOT NULL DEFAULT 0,
   notes TEXT,
