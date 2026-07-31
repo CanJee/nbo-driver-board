@@ -272,58 +272,63 @@ export default function DriverCard({
             <GripVertical size={15} />
           </div>
           <div
-            className="flex-1 flex items-center justify-between py-2 pr-3 cursor-pointer min-w-0"
+            className="flex-1 py-2 pr-3 cursor-pointer min-w-0"
             onClick={() => setExpanded(true)}
           >
-            <div className="min-w-0">
-              <div className="text-base font-bold text-fg-strong truncate leading-snug">
-                {driver.name}
-              </div>
-              {/* Walkies aren't handed out any more, so the card shows the car
-                  alone; walkie_number is still carried on the row for history. */}
-              <div className="text-xs mt-0.5 leading-snug">
-                {isUnassigned ? (
-                  <span className="italic text-amber-700 dark:text-amber-400">Car: --</span>
-                ) : (
-                  <span className="text-fg-soft">Car: {driver.car_number ?? '--'}</span>
+            {/* The name gets the full width of the card. The status badges used
+                to sit beside it, which cost the name ~90px and truncated half
+                the board's people to "Leo Dall…" once lanes got narrow; the car
+                line below has room to spare, so they ride along there instead. */}
+            <div className="text-base font-bold text-fg-strong truncate leading-snug">
+              {driver.name}
+            </div>
+            {/* Walkies aren't handed out any more, so the card shows the car
+                alone; walkie_number is still carried on the row for history. */}
+            {/* Both parts keep their full text: the car number is never worth
+                abbreviating, so in a lane too narrow for both the badge wraps to
+                its own line (ml-auto keeps it right-aligned either way). */}
+            <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-xs mt-0.5 leading-snug">
+              {isUnassigned ? (
+                <span className="italic text-amber-700 dark:text-amber-400 flex-shrink-0">Car: --</span>
+              ) : (
+                <span className="text-fg-soft flex-shrink-0">Car: {driver.car_number ?? '--'}</span>
+              )}
+              <span className="flex items-center gap-1.5 flex-shrink-0 ml-auto">
+                {driver.location_status === 'en_route' && (
+                  <span
+                    className="text-[9px] font-bold px-1.5 py-0.5 rounded-full leading-none"
+                    style={{ backgroundColor: 'var(--status-warn-strong-bg)', color: 'var(--status-warn-fg)' }}
+                  >
+                    → EN ROUTE
+                  </span>
                 )}
+                {driver.location_status === 'at_location' && (
+                  <span
+                    className="text-[9px] font-bold px-1.5 py-0.5 rounded-full leading-none"
+                    style={{ backgroundColor: 'var(--status-success-strong-bg)', color: 'var(--status-success-bright)' }}
+                  >
+                    ✓ AT LOCATION
+                  </span>
+                )}
+                {isAway && driver.away_reason && (
+                  <span className="text-base leading-none" title={AWAY_LABELS[driver.away_reason]}>
+                    {AWAY_ICONS[driver.away_reason]}
+                  </span>
+                )}
+              </span>
+            </div>
+            {/* Phone and notes aren't visible on collapsed cards, so when the
+                search matched one of them, say why this card lit up */}
+            {searchHit === 'phone' && (
+              <div className="text-[11px] mt-0.5 truncate" style={{ color: 'var(--status-warn-fg)' }}>
+                Phone: {driver.phone}
               </div>
-              {/* Phone and notes aren't visible on collapsed cards, so when the
-                  search matched one of them, say why this card lit up */}
-              {searchHit === 'phone' && (
-                <div className="text-[11px] mt-0.5 truncate" style={{ color: 'var(--status-warn-fg)' }}>
-                  Phone: {driver.phone}
-                </div>
-              )}
-              {searchHit === 'notes' && (
-                <div className="text-[11px] mt-0.5 truncate" style={{ color: 'var(--status-warn-fg)' }} title={driver.notes ?? ''}>
-                  Note: {driver.notes}
-                </div>
-              )}
-            </div>
-            <div className="flex items-center gap-1.5 flex-shrink-0 ml-2">
-              {driver.location_status === 'en_route' && (
-                <span
-                  className="text-[9px] font-bold px-1.5 py-0.5 rounded-full leading-none"
-                  style={{ backgroundColor: 'var(--status-warn-strong-bg)', color: 'var(--status-warn-fg)' }}
-                >
-                  → EN ROUTE
-                </span>
-              )}
-              {driver.location_status === 'at_location' && (
-                <span
-                  className="text-[9px] font-bold px-1.5 py-0.5 rounded-full leading-none"
-                  style={{ backgroundColor: 'var(--status-success-strong-bg)', color: 'var(--status-success-bright)' }}
-                >
-                  ✓ AT LOCATION
-                </span>
-              )}
-              {isAway && driver.away_reason && (
-                <span className="text-lg" title={AWAY_LABELS[driver.away_reason]}>
-                  {AWAY_ICONS[driver.away_reason]}
-                </span>
-              )}
-            </div>
+            )}
+            {searchHit === 'notes' && (
+              <div className="text-[11px] mt-0.5 truncate" style={{ color: 'var(--status-warn-fg)' }} title={driver.notes ?? ''}>
+                Note: {driver.notes}
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -385,15 +390,18 @@ export default function DriverCard({
                 {shifts.length > 1 ? 'Shifts' : 'Shift'}
               </div>
               <div className="space-y-1">
+                {/* Wraps between fields, not through them: left to wrap freely a
+                    narrow card breaks the time range and the lane name mid-text
+                    ("7:00 AM / – 1:00 / PM"), which reads as three broken lines. */}
                 {shifts.map((s, i) => (
-                  <div key={i} className="flex items-center gap-2 text-xs text-fg-soft">
+                  <div key={i} className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-fg-soft">
                     <span
                       className="inline-block w-2.5 h-2.5 rounded-sm flex-shrink-0"
                       style={{ backgroundColor: SHIFT_COLORS[s.shift_type] }}
                     />
                     <span className="font-semibold text-fg-strong">{SHIFT_LABELS[s.shift_type]}</span>
-                    {s.label && <span className="text-fg-muted">{s.label}</span>}
-                    <span className="text-fg-faint">· {LANE_LABELS[s.lane]}</span>
+                    {s.label && <span className="text-fg-muted whitespace-nowrap">{s.label}</span>}
+                    <span className="text-fg-faint whitespace-nowrap">· {LANE_LABELS[s.lane]}</span>
                   </div>
                 ))}
               </div>
@@ -412,10 +420,12 @@ export default function DriverCard({
             <div className="text-[10px] font-bold tracking-widest uppercase text-fg-faint mb-1.5">
               Location Status
             </div>
-            <div className="flex gap-1.5">
+            {/* Side by side while both labels fit, stacked below that — squeezing
+                two 11px bold labels into a narrow lane's card clipped them. */}
+            <div className="grid gap-1.5" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(84px, 1fr))' }}>
               <button
                 onClick={() => onSetLocationStatus(driver, driver.location_status === 'en_route' ? null : 'en_route')}
-                className="flex-1 py-1.5 rounded text-[11px] font-bold transition-colors"
+                className="py-1.5 rounded text-[11px] font-bold transition-colors"
                 style={
                   driver.location_status === 'en_route'
                     ? { backgroundColor: 'var(--status-warn-strong-bg)', color: 'var(--status-warn-fg)', border: '1px solid #B45309' }
@@ -426,7 +436,7 @@ export default function DriverCard({
               </button>
               <button
                 onClick={() => onSetLocationStatus(driver, driver.location_status === 'at_location' ? null : 'at_location')}
-                className="flex-1 py-1.5 rounded text-[11px] font-bold transition-colors"
+                className="py-1.5 rounded text-[11px] font-bold transition-colors"
                 style={
                   driver.location_status === 'at_location'
                     ? { backgroundColor: 'var(--status-success-strong-bg)', color: 'var(--status-success-bright)', border: '1px solid var(--status-success)' }
@@ -464,7 +474,7 @@ export default function DriverCard({
               // them on one row while they fit and wraps to a second row when
               // they don't, which stays readable where squeezing five columns
               // into a narrow lane would clip every caption to "Prac…".
-              <div className="grid gap-1" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(46px, 1fr))' }}>
+              <div className="grid gap-1" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(42px, 1fr))' }}>
                 {(Object.entries(AWAY_ICONS) as [AwayReason, string][]).map(([reason, icon]) => (
                   <button
                     key={reason}
@@ -554,8 +564,9 @@ export default function DriverCard({
             )}
           </div>
 
-          {/* Action buttons */}
-          <div className="flex items-center gap-2">
+          {/* Action buttons — wrap rather than squash when a narrow card can't
+              fit ASSIGN and CHECK OUT on one line. */}
+          <div className="flex flex-wrap items-center gap-2">
             {isUnassigned && (
               <button
                 onClick={() => onAssign(driver)}

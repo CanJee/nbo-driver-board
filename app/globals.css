@@ -103,11 +103,16 @@
 
 /* Layout tokens — geometry rather than colour, so they live on :root only (the
    .dark block above overrides colours and must not fork these).
-   --card-min sets how narrow a card column may get, which is what decides how
-   many columns a lane wraps into; --lane-min keeps every lane wide enough for
-   one full column. LANE_MIN_PX in LaneResizer.tsx mirrors --lane-min. */
+   These three are the single definition of the board's horizontal geometry: the
+   lane min-width rule below is built from them, LaneResizer reads that computed
+   min-width back rather than recomputing it, and Board.tsx reads the tokens
+   themselves to work out how many card columns the board can afford to show.
+   --card-min is the floor for one card column, and so also the floor a lane
+   divider can be dragged to. Lowering it lets more lanes fit on screen and gives
+   the dividers more travel; it must stay wide enough for an expanded card to
+   remain usable (see the narrow-width handling in DriverCard). */
 :root {
-  --card-min: 210px;
+  --card-min: 170px;
   --card-gap: 6px; /* must match the gap-1.5 on the lane's card list */
   --lane-chrome: 18px; /* lane list padding (2 × p-2) + the lane's 1px borders */
 }

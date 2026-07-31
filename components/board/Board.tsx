@@ -65,11 +65,41 @@ const CARD_ROW_PX = 62;
 const CARD_GAP_PX = 6;
 // The lane list's p-2, top + bottom (mirrors --lane-chrome in globals.css).
 const LANE_LIST_PADDING_PX = 16;
+// One divider between each pair of lanes (LaneResizer's w-2).
+const RESIZER_PX = 8;
 // Accurate for a 1080p TV, so the server-rendered first paint already has
 // sensible lane widths; the ResizeObserver refines it right after mount.
 const DEFAULT_ROWS_PER_COL = 12;
+// Enough for the usual 3+2+1+1+1 shape. Deliberately conservative: guessing high
+// would let the first paint overflow sideways before the observer corrects it.
+const DEFAULT_COL_BUDGET = 8;
 // A single very full lane shouldn't be allowed to starve the other four.
 const MAX_LANE_COLS = 3;
+
+/** A CSS length token off :root, in layout px. globals.css owns the values. */
+function rootPx(name: string, fallback: number): number {
+  if (typeof window === 'undefined') return fallback;
+  const v = parseFloat(getComputedStyle(document.documentElement).getPropertyValue(name));
+  return Number.isFinite(v) ? v : fallback;
+}
+
+/**
+ * How many card columns fit across the board at once.
+ *
+ * Lanes are flex items with a min-width of (cols × --card-min + gaps + chrome),
+ * so once the lanes' minimums add up to more than the board, flex can't shrink
+ * them any further and the board scrolls sideways — which on a dispatch TV means
+ * a whole lane (Meals, the last one) is simply not on screen, with nobody there
+ * to scroll to it. Capping the total column count is what stops that happening.
+ */
+function columnBudget(boardWidthPx: number, laneCount: number): number {
+  const cardMin = rootPx('--card-min', 170);
+  const gap = rootPx('--card-gap', CARD_GAP_PX);
+  const chrome = rootPx('--lane-chrome', 18);
+  // Solves total = cardMin·C + gap·(C − lanes) + chrome·lanes + dividers for C.
+  const fixed = chrome * laneCount - gap * laneCount + RESIZER_PX * (laneCount - 1);
+  return Math.max(laneCount, Math.floor((boardWidthPx - fixed) / (cardMin + gap)));
+}
 
 /** Per-lane card grid: columns across, and rows to fill down each column. */
 type LaneLayout = Record<LaneId, { cols: number; rows: number }>;
@@ -246,6 +276,7 @@ export default function Board({ initialDrivers, initialDispatchers }: BoardProps
   const [laneWidths, setLaneWidths] = useState<LaneWidthsPref>({ mode: 'auto' });
   const [isResizing, setIsResizing] = useState(false);
   const [rowsPerCol, setRowsPerCol] = useState(DEFAULT_ROWS_PER_COL);
+  const [colBudget, setColBudget] = useState(DEFAULT_COL_BUDGET);
 
   // Saved prefs load after mount so the server render and the first client
   // render agree on the defaults (same mount guard ThemeToggle uses).
@@ -256,21 +287,25 @@ export default function Board({ initialDrivers, initialDispatchers }: BoardProps
 
   // Lanes are equal-height flex siblings, so one lane's list height tells us how
   // many cards fit in a single column — which is what decides how many columns a
-  // crowded lane needs. clientHeight (not getBoundingClientRect) because it is in
-  // layout pixels: zooming the board out gives a lane more layout height to fill,
+  // crowded lane wants; the board's own width decides how many it can have.
+  // clientHeight/clientWidth (not getBoundingClientRect) because they are in
+  // layout pixels: zooming the board out gives it more layout space to fill,
   // which is exactly the effect we want reflected here. Re-runs on zoom change
-  // because that resizes the lane in layout space without necessarily changing
+  // because that resizes the board in layout space without necessarily changing
   // its on-screen size, so the observer alone would not always fire.
   useEffect(() => {
-    const list = boardRef.current?.querySelector<HTMLElement>('[data-lane] .lane-scroll');
-    if (!list) return;
+    const board = boardRef.current;
+    const list = board?.querySelector<HTMLElement>('[data-lane] .lane-scroll');
+    if (!board || !list) return;
     const measure = () => {
       const contentH = list.clientHeight - LANE_LIST_PADDING_PX;
       setRowsPerCol(Math.max(1, Math.floor((contentH + CARD_GAP_PX) / (CARD_ROW_PX + CARD_GAP_PX))));
+      setColBudget(columnBudget(board.clientWidth, ALL_LANES.length));
     };
     measure();
     const ro = new ResizeObserver(measure);
     ro.observe(list);
+    ro.observe(board);
     return () => ro.disconnect();
   }, [zoom]);
 
@@ -374,18 +409,44 @@ export default function Board({ initialDrivers, initialDispatchers }: BoardProps
   const frozenLayoutRef = useRef<LaneLayout | null>(null);
   const laneLayout = useMemo<LaneLayout>(() => {
     const frozen = activeDriver ? frozenLayoutRef.current : null;
+    const counts = {} as Record<LaneId, number>;
+    const cols = {} as Record<LaneId, number>;
+    for (const lane of ALL_LANES) {
+      counts[lane] = drivers.filter((d) => d.lane === lane).length;
+      cols[lane] =
+        frozen?.[lane].cols ??
+        Math.min(MAX_LANE_COLS, Math.max(1, Math.ceil(counts[lane] / rowsPerCol)));
+    }
+
+    // What the lanes want, reconciled with what the board can actually show.
+    // Without this the minimum widths simply add up past the viewport and the
+    // board scrolls sideways, hiding the last lane entirely. Columns are handed
+    // back one at a time from whichever lane has the most: that lane's cards are
+    // the shortest per column, so it is the one that loses the least by giving
+    // one up (ties go to the emptier lane). Every lane keeps its last column.
+    if (!frozen) {
+      let total = ALL_LANES.reduce((n, lane) => n + cols[lane], 0);
+      while (total > colBudget) {
+        const victim = ALL_LANES.reduce((worst, lane) =>
+          cols[lane] > cols[worst] ||
+          (cols[lane] === cols[worst] && counts[lane] < counts[worst])
+            ? lane
+            : worst
+        );
+        if (cols[victim] <= 1) break;   // nothing left to give back
+        cols[victim] -= 1;
+        total -= 1;
+      }
+    }
+
     const next = {} as LaneLayout;
     for (const lane of ALL_LANES) {
-      const count = drivers.filter((d) => d.lane === lane).length;
-      const cols =
-        frozen?.[lane].cols ??
-        Math.min(MAX_LANE_COLS, Math.max(1, Math.ceil(count / rowsPerCol)));
-      const rows = Math.max(frozen?.[lane].rows ?? 1, Math.ceil(count / cols), 1);
-      next[lane] = { cols, rows };
+      const rows = Math.max(frozen?.[lane].rows ?? 1, Math.ceil(counts[lane] / cols[lane]), 1);
+      next[lane] = { cols: cols[lane], rows };
     }
     if (!frozen) frozenLayoutRef.current = next;
     return next;
-  }, [drivers, rowsPerCol, activeDriver]);
+  }, [drivers, rowsPerCol, colBudget, activeDriver]);
 
   // A lane is exactly as wide as the number of columns it is showing.
   const autoGrows = useMemo<LaneGrows>(() => {
