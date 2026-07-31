@@ -72,7 +72,7 @@ export default function SearchBox({
         onKeyDown={handleKeyDown}
         autoFocus={autoFocus}
         placeholder="Search"
-        aria-label="Search drivers by name, walkie, car, phone, or notes"
+        aria-label="Search drivers by name, car, phone, or notes"
         className="w-full py-1.5 pl-8 pr-14 rounded-lg text-sm text-fg-strong placeholder:text-fg-ghost outline-none focus:border-accent-blue transition-colors"
         style={{ backgroundColor: 'var(--surface-input)', border: '1px solid var(--edge)' }}
       />

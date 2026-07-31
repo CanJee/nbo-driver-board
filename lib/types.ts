@@ -4,7 +4,7 @@ export type DriverStatus = 'unassigned' | 'assigned' | 'away';
 
 export type LocationStatus = 'at_location' | 'en_route';
 
-export type AwayReason = 'gas' | 'carwash' | 'practice' | 'parking';
+export type AwayReason = 'gas' | 'carwash' | 'practice' | 'parking' | 'uptown_shuttle';
 
 export type LaneId =
   | 'tennis_centre'
@@ -96,11 +96,15 @@ export const SHIFT_ORDER: Record<ShiftType, number> = {
 
 export const FLEET_DRIVER_ROLE = 'Fleet Driver';
 
+// Order here is the order of the buttons on the card — keep the three maps below
+// in step, and remember the away_reason CHECK constraint in the database has to
+// allow any key added here (see supabase/migrations/*_uptown_shuttle_away.sql).
 export const AWAY_ICONS: Record<AwayReason, string> = {
   gas: '⛽',
   carwash: '🧼',
   practice: '🎾',
   parking: '🚐',
+  uptown_shuttle: '🏨',
 };
 
 export const AWAY_LABELS: Record<AwayReason, string> = {
@@ -108,6 +112,19 @@ export const AWAY_LABELS: Record<AwayReason, string> = {
   carwash: 'Car Wash',
   practice: 'Practice Courts',
   parking: 'Parking Lot Shuttle',
+  uptown_shuttle: 'Uptown Shuttle',
+};
+
+/** One-word captions under the away buttons — the full labels are too wide to fit
+ *  five buttons across a card. Spelled out rather than derived from the first word
+ *  of AWAY_LABELS, so a label reworded for the tooltip can't silently reshuffle
+ *  what dispatchers read on the buttons. */
+export const AWAY_SHORT_LABELS: Record<AwayReason, string> = {
+  gas: 'Gas',
+  carwash: 'Car',
+  practice: 'Practice',
+  parking: 'Parking',
+  uptown_shuttle: 'Uptown',
 };
 
 // Board columns + check-in lane options (with `meals` appended in the UI).

@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Check, ChevronUp, Copy, GripVertical, Pencil, Save, X } from 'lucide-react';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { AwayReason, Driver, LaneId, LocationStatus, MAIN_LANES, SHIFT_COLORS, SHIFT_LABELS, LANE_LABELS, AWAY_ICONS, AWAY_LABELS } from '@/lib/types';
+import { AwayReason, Driver, LaneId, LocationStatus, MAIN_LANES, SHIFT_COLORS, SHIFT_LABELS, LANE_LABELS, AWAY_ICONS, AWAY_LABELS, AWAY_SHORT_LABELS } from '@/lib/types';
 import { copyToClipboard } from '@/lib/clipboard';
 import { formatClockTime, formatDurationShort } from '@/lib/date';
 import { SearchMatchField } from '@/lib/search';
@@ -279,13 +279,13 @@ export default function DriverCard({
               <div className="text-base font-bold text-fg-strong truncate leading-snug">
                 {driver.name}
               </div>
+              {/* Walkies aren't handed out any more, so the card shows the car
+                  alone; walkie_number is still carried on the row for history. */}
               <div className="text-xs mt-0.5 leading-snug">
                 {isUnassigned ? (
-                  <span className="italic text-amber-700 dark:text-amber-400">Walkie: --&nbsp;&nbsp;Car: --</span>
+                  <span className="italic text-amber-700 dark:text-amber-400">Car: --</span>
                 ) : (
-                  <span className="text-fg-soft">
-                    Walkie: {driver.walkie_number ?? '--'}&nbsp;&nbsp;Car: {driver.car_number ?? '--'}
-                  </span>
+                  <span className="text-fg-soft">Car: {driver.car_number ?? '--'}</span>
                 )}
               </div>
               {/* Phone and notes aren't visible on collapsed cards, so when the
@@ -356,16 +356,14 @@ export default function DriverCard({
           {/* Time in the current lane */}
           <TimeInLane driver={driver} />
 
-          {/* Walkie / Car / Phone */}
+          {/* Car / Phone */}
           <div className="mb-3 space-y-1">
             <div className="flex items-center justify-between">
               <div className="text-sm text-fg-soft">
                 {isUnassigned ? (
-                  <span className="italic text-amber-700 dark:text-amber-400">Walkie: --&nbsp;&nbsp;Car: --</span>
+                  <span className="italic text-amber-700 dark:text-amber-400">Car: --</span>
                 ) : (
                   <span>
-                    Walkie: <span className="text-fg-strong font-medium">{driver.walkie_number ?? '--'}</span>
-                    &nbsp;&nbsp;
                     Car: <span className="text-fg-strong font-medium">{driver.car_number ?? '--'}</span>
                   </span>
                 )}
@@ -404,7 +402,7 @@ export default function DriverCard({
 
           {/* Location Status — shown for every driver, including unassigned ones.
               Where a driver is has nothing to do with whether they have been
-              handed a walkie or a car, and equipment is optional at check-in
+              handed a car, and the car number is optional at check-in
               ("can assign later"), so gating this on assignment left the common
               just-checked-in case with no way to set en route / at location.
               The collapsed card already renders the badge ungated, so hiding
@@ -460,17 +458,25 @@ export default function DriverCard({
                 </button>
               </div>
             ) : (
-              <div className="flex gap-1.5">
+              // Equal-width columns that share whatever width the card has,
+              // rather than a flex row the buttons can push out of it — five
+              // reasons no longer fit every lane at every zoom. auto-fit keeps
+              // them on one row while they fit and wraps to a second row when
+              // they don't, which stays readable where squeezing five columns
+              // into a narrow lane would clip every caption to "Prac…".
+              <div className="grid gap-1" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(46px, 1fr))' }}>
                 {(Object.entries(AWAY_ICONS) as [AwayReason, string][]).map(([reason, icon]) => (
                   <button
                     key={reason}
                     onClick={() => onSetAway(driver, reason)}
                     title={AWAY_LABELS[reason]}
-                    className="flex flex-col items-center gap-0.5 px-2 py-1 rounded transition-colors hover:bg-black/5 dark:hover:bg-white/10 text-center"
+                    className="flex flex-col items-center gap-0.5 min-w-0 px-0.5 py-1 rounded transition-colors hover:bg-black/5 dark:hover:bg-white/10 text-center"
                     style={{ border: '1px solid var(--edge-muted)' }}
                   >
-                    <span className="text-base">{icon}</span>
-                    <span className="text-[8px] text-fg-faint leading-none">{AWAY_LABELS[reason].split(' ')[0]}</span>
+                    <span className="text-base leading-none">{icon}</span>
+                    <span className="text-[8px] text-fg-faint leading-none w-full truncate">
+                      {AWAY_SHORT_LABELS[reason]}
+                    </span>
                   </button>
                 ))}
               </div>

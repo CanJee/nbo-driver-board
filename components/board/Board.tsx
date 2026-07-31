@@ -600,14 +600,16 @@ export default function Board({ initialDrivers, initialDispatchers }: BoardProps
   };
 
   // ── ASSIGN ──
-  const handleAssign = async (walkieNumber: string, carNumber: string) => {
+  // Walkies are no longer handed out, so the car number alone decides whether a
+  // driver counts as assigned. walkie_number is left out of the payload rather
+  // than nulled, so any historical value on the row survives.
+  const handleAssign = async (carNumber: string) => {
     if (!assignDriver) return;
     await supabase
       .from('drivers')
       .update({
-        walkie_number: walkieNumber || null,
         car_number: carNumber || null,
-        status: walkieNumber || carNumber ? 'assigned' : 'unassigned',
+        status: carNumber ? 'assigned' : 'unassigned',
       })
       .eq('id', assignDriver.id);
     await fetchDrivers();
@@ -629,16 +631,20 @@ export default function Board({ initialDrivers, initialDispatchers }: BoardProps
       shifts: data.shifts,
       lane: data.lane,
       lane_order: nextOrder,
-      walkie_number: data.walkieNumber || null,
       car_number: data.carNumber || null,
-      status: data.walkieNumber || data.carNumber ? 'assigned' : 'unassigned',
+      status: data.carNumber ? 'assigned' : 'unassigned',
     });
 
-    if (!error) {
-      setShowCheckIn(false);
-      setCheckInComplete({ name: data.name, shifts: data.shifts, lane: data.lane });
-      await fetchDrivers();
+    if (error) {
+      // Previously a failed insert closed nothing and said nothing, so the
+      // dispatcher was left staring at a filled-in form with no idea why.
+      setToast(`Check-in failed: ${error.message}`);
+      return;
     }
+
+    setShowCheckIn(false);
+    setCheckInComplete({ name: data.name, shifts: data.shifts, lane: data.lane });
+    await fetchDrivers();
   };
 
   const getDispatcher = (laneId: string) =>
@@ -862,6 +868,7 @@ export default function Board({ initialDrivers, initialDispatchers }: BoardProps
       <Portal>
         {showCheckIn && (
           <CheckInModal
+            activeDrivers={drivers}
             onConfirm={handleCheckIn}
             onCancel={() => setShowCheckIn(false)}
           />
