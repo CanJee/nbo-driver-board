@@ -107,7 +107,7 @@ export const AWAY_ICONS: Record<AwayReason, string> = {
   carwash: '🧼',
   practice: '🎾',
   parking: '🚐',
-  meals: '🍽️',
+  meals: '🍔',
 };
 
 export const AWAY_LABELS: Record<AwayReason, string> = {
