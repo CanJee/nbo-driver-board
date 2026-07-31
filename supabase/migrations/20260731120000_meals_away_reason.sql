@@ -1,7 +1,7 @@
 -- =============================================
 -- Migration: 'meals' replaces 'uptown_shuttle' as an away reason
--- Idempotent: safe to re-run. Auto-applied to preview branch DBs from this
--- directory; must ALSO be run manually in the prod SQL editor (see PREVIEW.md).
+-- Idempotent: safe to re-run. Supabase Branching applies it — to this PR's preview
+-- branch DB on every commit, and to prod when the PR merges to main (see PREVIEW.md).
 -- =============================================
 
 -- Two changes land together, because they are the same change:

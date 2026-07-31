@@ -51,10 +51,14 @@ changes needed.
 
 ## Keeping schema in sync
 
-`supabase/migrations/` is the source of truth for **preview/branch** databases. Any SQL
-change applied to prod must also be added here as a new `supabase/migrations/<timestamp>_*.sql`
-file, so preview DBs match prod. The clone copies *rows only* — the schema must already
-match, so run the same migrations on prod before relying on the clone.
+`supabase/migrations/` is the source of truth for **every** database, prod included.
+Supabase Branching applies new migration files to a PR's branch DB on each commit, and
+to **prod when the PR merges to main** — no manual SQL-editor step. Confirm a merge
+landed in Supabase → Database → Migrations.
+
+So: never apply schema SQL to prod by hand. Add it as a new
+`supabase/migrations/<timestamp>_*.sql` and let the merge carry it, or prod and the
+preview DBs drift. The clone copies *rows only* — schemas have to match already.
 
 ## Local manual clone (optional)
 
