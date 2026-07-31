@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Search, X, Plus } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import {
+  Driver,
   DriverShift,
   LaneId,
   LANE_LABELS,
@@ -29,11 +30,12 @@ export interface CheckInData {
   shiftTime: string;         // primary shift label
   shifts: DriverShift[];     // all shifts being checked in
   lane: LaneId;
-  walkieNumber: string;
   carNumber: string;
 }
 
 interface CheckInModalProps {
+  /** Everyone currently on the board — nobody here can be checked in again. */
+  activeDrivers: Driver[];
   onConfirm: (data: CheckInData) => void;
   onCancel: () => void;
 }
@@ -95,7 +97,12 @@ function sortDrafts(drafts: ShiftDraft[]): ShiftDraft[] {
   });
 }
 
-export default function CheckInModal({ onConfirm, onCancel }: CheckInModalProps) {
+/** Key a person by name for the "already on the board" check. Phone is deliberately
+ *  left out: a manual check-in carries no phone number, so keying on it would let
+ *  the same driver be added a second time by hand — the exact case this blocks. */
+const boardKey = (name: string) => normalizeName(name).toLowerCase();
+
+export default function CheckInModal({ activeDrivers, onConfirm, onCancel }: CheckInModalProps) {
   const today = useMemo(() => getTournamentDate(), []);
 
   const [query, setQuery] = useState('');
@@ -109,7 +116,6 @@ export default function CheckInModal({ onConfirm, onCancel }: CheckInModalProps)
   const [manualPeriod, setManualPeriod] = useState<ShiftType>('morning');
   const [manualTime, setManualTime] = useState('');
   const [lane, setLane] = useState<LaneId>('tennis_centre');
-  const [walkieDigits, setWalkieDigits] = useState('');
   const [carDigits, setCarDigits] = useState('');
   const [error, setError] = useState<string | null>(null);
 
@@ -156,7 +162,19 @@ export default function CheckInModal({ onConfirm, onCancel }: CheckInModalProps)
       .filter((g) => g.name.toLowerCase().includes(q));
   }, [query, groups, showAllRoles]);
 
+  // Who is already on the board. Checked-out drivers are not in `activeDrivers`,
+  // so someone who finishes a shift and comes back can still be checked in again.
+  const onBoard = useMemo(() => {
+    const map = new Map<string, Driver>();
+    for (const d of activeDrivers) map.set(boardKey(d.name), d);
+    return map;
+  }, [activeDrivers]);
+
+  // Live warning for the name in the box, whether picked from the roster or typed.
+  const duplicate = query.trim() ? onBoard.get(boardKey(query)) ?? null : null;
+
   const handleSelect = (g: GroupedDriver) => {
+    if (onBoard.has(boardKey(g.name))) return;   // row is disabled; ignore stray clicks
     const newDrafts = sortDrafts(g.entries.map(entryToDraft));
     setSelected(g);
     setQuery(g.name);
@@ -198,6 +216,15 @@ export default function CheckInModal({ onConfirm, onCancel }: CheckInModalProps)
     e.preventDefault();
     const name = query.trim();
     if (!name) { setError('Please enter or select a driver name.'); return; }
+    // Catches the manually typed name too, not just a pick from the dropdown.
+    const already = onBoard.get(boardKey(name));
+    if (already) {
+      setError(
+        `${already.name} is already checked in (${LANE_LABELS[already.lane]}). ` +
+        'Check them out first if you need to check them back in.'
+      );
+      return;
+    }
     if (drafts.length === 0) { setError('Add at least one shift for this driver.'); return; }
 
     const sorted = sortDrafts(drafts);
@@ -223,7 +250,6 @@ export default function CheckInModal({ onConfirm, onCancel }: CheckInModalProps)
       shiftTime: primary.label,
       shifts,
       lane,
-      walkieNumber: formatEquipment(walkieDigits, 'W-'),
       carNumber: formatEquipment(carDigits, 'C-'),
     });
   };
@@ -314,27 +340,41 @@ export default function CheckInModal({ onConfirm, onCancel }: CheckInModalProps)
                   style={{ backgroundColor: 'var(--surface-panel)', border: '1px solid var(--edge)' }}>
                   {filtered.map((g) => {
                     const periods = sortDrafts(g.entries.map(entryToDraft));
+                    // Still listed, just not selectable — a dispatcher searching for
+                    // someone needs to see that they are already on the board, which
+                    // hiding the row would not tell them.
+                    const already = onBoard.get(boardKey(g.name));
                     return (
                       <button
                         key={g.key}
                         type="button"
+                        disabled={!!already}
                         onClick={() => handleSelect(g)}
-                        className="w-full text-left px-4 py-2.5 hover:bg-black/5 dark:hover:bg-white/10 transition-colors"
+                        className="w-full text-left px-4 py-2.5 transition-colors enabled:hover:bg-black/5 dark:enabled:hover:bg-white/10 disabled:opacity-50 disabled:cursor-not-allowed"
                       >
-                        <div className="flex items-center justify-between">
-                          <div className="text-sm font-semibold text-fg-strong">{g.name}</div>
-                          <div className="flex items-center gap-1">
-                            {periods.map((d) => (
-                              <span key={d.key}
-                                className="w-2 h-2 rounded-sm"
-                                style={{ backgroundColor: SHIFT_COLORS[d.shift_type] }}
-                                title={SHIFT_LABELS[d.shift_type]}
-                              />
-                            ))}
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="text-sm font-semibold text-fg-strong truncate">{g.name}</div>
+                          <div className="flex items-center gap-1 flex-shrink-0">
+                            {already ? (
+                              <span className="text-[9px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded"
+                                style={{ backgroundColor: 'var(--status-warn-bg)', color: 'var(--status-warn-fg)' }}>
+                                On board
+                              </span>
+                            ) : (
+                              periods.map((d) => (
+                                <span key={d.key}
+                                  className="w-2 h-2 rounded-sm"
+                                  style={{ backgroundColor: SHIFT_COLORS[d.shift_type] }}
+                                  title={SHIFT_LABELS[d.shift_type]}
+                                />
+                              ))
+                            )}
                           </div>
                         </div>
                         <div className="text-[10px] text-fg-muted mt-0.5">
-                          {g.roles.join(', ') || '—'} · {periods.map((d) => SHIFT_LABELS[d.shift_type]).join(' + ')}
+                          {already
+                            ? `Checked in · ${LANE_LABELS[already.lane]}`
+                            : `${g.roles.join(', ') || '—'} · ${periods.map((d) => SHIFT_LABELS[d.shift_type]).join(' + ')}`}
                         </div>
                       </button>
                     );
@@ -342,17 +382,23 @@ export default function CheckInModal({ onConfirm, onCancel }: CheckInModalProps)
                 </div>
               )}
             </div>
-            {selected && (
+            {/* The already-checked-in warning replaces the roster hints: it is the
+                only thing that matters about this name until it changes. */}
+            {duplicate ? (
+              <p className="text-[10px] text-amber-700 dark:text-amber-400 mt-1.5 ml-1">
+                Already checked in · {LANE_LABELS[duplicate.lane]} — check them out first
+                to check them back in.
+              </p>
+            ) : selected ? (
               <p className="text-[10px] text-fg-faint mt-1.5 ml-1">
                 ✓ On today&apos;s roster · {selected.roles.join(', ')}
                 {selected.phone ? ` · ${selected.phone}` : ''}
               </p>
-            )}
-            {!selected && query.trim() && (
+            ) : query.trim() ? (
               <p className="text-[10px] text-amber-700 dark:text-amber-400 mt-1.5 ml-1">
                 Not on today&apos;s roster — add a shift below to check in manually.
               </p>
-            )}
+            ) : null}
           </div>
 
           {/* ── STEP 2: Shifts ── */}
@@ -457,17 +503,15 @@ export default function CheckInModal({ onConfirm, onCancel }: CheckInModalProps)
             </div>
           </div>
 
-          {/* ── STEP 4: Equipment (optional) ── */}
+          {/* ── STEP 4: Car (optional) ── */}
           <div>
             <label className="block text-[11px] font-bold tracking-widest uppercase mb-2"
               style={{ color: 'var(--brand)' }}>
-              4 · Equipment <span className="text-fg-faint normal-case font-normal tracking-normal">(optional — can assign later)</span>
+              4 · Car <span className="text-fg-faint normal-case font-normal tracking-normal">(optional — can assign later)</span>
             </label>
+            {/* Half width: the field holds two digits, so a full-width box just
+                looks like something is missing beside it. */}
             <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="text-[10px] text-fg-faint uppercase tracking-wider block mb-1">Walkie #</label>
-                <EquipmentInput prefix="W-" value={walkieDigits} onChange={setWalkieDigits} />
-              </div>
               <div>
                 <label className="text-[10px] text-fg-faint uppercase tracking-wider block mb-1">Car #</label>
                 <EquipmentInput prefix="C-" value={carDigits} onChange={setCarDigits} />
@@ -478,10 +522,11 @@ export default function CheckInModal({ onConfirm, onCancel }: CheckInModalProps)
           {/* Submit */}
           <button
             type="submit"
-            className="w-full py-3 rounded-xl font-black text-sm tracking-widest uppercase text-white transition-opacity hover:opacity-90"
+            disabled={!!duplicate}
+            className="w-full py-3 rounded-xl font-black text-sm tracking-widest uppercase text-white transition-opacity hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:opacity-40"
             style={{ backgroundColor: 'var(--brand)' }}
           >
-            Complete Check-In
+            {duplicate ? 'Already Checked In' : 'Complete Check-In'}
           </button>
         </form>
       </div>
