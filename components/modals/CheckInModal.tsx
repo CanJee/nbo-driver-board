@@ -110,6 +110,8 @@ export default function CheckInModal({ activeDrivers, lanes, onConfirm, onCancel
   const [query, setQuery] = useState('');
   const [roster, setRoster] = useState<RosterEntry[]>([]);
   const [rosterLoaded, setRosterLoaded] = useState(false);
+  /** Why the roster couldn't be READ — not the same as "nothing imported". */
+  const [rosterError, setRosterError] = useState<string | null>(null);
   const [showAllRoles, setShowAllRoles] = useState(false);
   const [showDropdown, setShowDropdown] = useState(false);
   const [selected, setSelected] = useState<GroupedDriver | null>(null);
@@ -127,15 +129,28 @@ export default function CheckInModal({ activeDrivers, lanes, onConfirm, onCancel
 
   // Load today's roster, focus search without scrolling
   useEffect(() => {
-    supabase
-      .from('roster')
-      .select('*')
-      .eq('shift_date', today)
-      .order('name')
-      .then(({ data }) => {
-        if (data) setRoster(data as RosterEntry[]);
-        setRosterLoaded(true);
-      });
+    (async () => {
+      const { data, error } = await supabase
+        .from('roster')
+        .select('*')
+        .eq('shift_date', today)
+        .order('name');
+      const rows = (data ?? []) as RosterEntry[];
+      // An empty result is ambiguous: nothing imported, or RLS filtering every
+      // row because this tab's session died — which comes back with NO error.
+      // Only claim "no roster imported" while actually signed in (the same
+      // rule as the board's fetchers); anything else is a read failure and
+      // gets blamed on the connection, not on the roster.
+      if (error) {
+        setRosterError(error.message);
+      } else if (rows.length === 0) {
+        const { data: auth } = await supabase.auth.getSession();
+        if (!auth.session) setRosterError('you may be signed out');
+      } else {
+        setRoster(rows);
+      }
+      setRosterLoaded(true);
+    })();
     searchRef.current?.focus({ preventScroll: true });
   }, [today]);
 
@@ -262,7 +277,7 @@ export default function CheckInModal({ activeDrivers, lanes, onConfirm, onCancel
     });
   };
 
-  const noRosterToday = rosterLoaded && roster.length === 0;
+  const noRosterToday = rosterLoaded && !rosterError && roster.length === 0;
 
   return (
     <div className="modal-backdrop" onClick={onCancel}>
@@ -292,6 +307,18 @@ export default function CheckInModal({ activeDrivers, lanes, onConfirm, onCancel
             <div className="text-sm text-(--status-error-fg) rounded-lg px-4 py-2.5"
               style={{ backgroundColor: 'var(--status-error-bg)', border: '1px solid var(--brand)' }}>
               {error}
+            </div>
+          )}
+
+          {/* Roster read failure — a dead session or blocked request used to
+              render as "No roster imported", sending people hunting for an
+              import problem that didn't exist. Manual check-in still works,
+              and its save path has its own failure toast. */}
+          {rosterError && (
+            <div className="text-sm text-(--status-error-fg) rounded-lg px-4 py-2.5"
+              style={{ backgroundColor: 'var(--status-error-bg)', border: '1px solid var(--brand)' }}>
+              Couldn&apos;t load today&apos;s roster ({rosterError}). Sign out and back in, then
+              try again. You can still enter a driver manually below.
             </div>
           )}
 
