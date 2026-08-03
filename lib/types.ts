@@ -57,6 +57,12 @@ export interface Driver {
   lane_entered_at: string | null;
 }
 
+/** Which dispatcher is staffing a lane, shown under the lane's header. */
+export interface DispatcherAssignment {
+  lane: string;
+  dispatcher_name: string;
+}
+
 /** A single assignment row from an imported daily roster. */
 export interface RosterEntry {
   id: string;

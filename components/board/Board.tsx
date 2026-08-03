@@ -18,7 +18,16 @@ import {
 } from '@dnd-kit/core';
 import { arrayMove } from '@dnd-kit/sortable';
 import { createClient } from '@/lib/supabase/client';
-import { AwayReason, Driver, DriverShift, Lane, LaneId, LANE_SELECT, LocationStatus } from '@/lib/types';
+import {
+  AwayReason,
+  DispatcherAssignment,
+  Driver,
+  DriverShift,
+  Lane,
+  LaneId,
+  LANE_SELECT,
+  LocationStatus,
+} from '@/lib/types';
 import { activeLanes, laneLabel } from '@/lib/lanes';
 import { matchDriver, SearchMatchField, SearchState } from '@/lib/search';
 import {
@@ -31,12 +40,15 @@ import {
   saveZoom,
 } from '@/lib/board-prefs';
 import { useLgUp } from '@/lib/useLgUp';
+import { useRefetchOnWake } from '@/lib/useRefetchOnWake';
+import { useWakeLock } from '@/lib/useWakeLock';
 import SwimLane from './SwimLane';
 import LaneTabs from './LaneTabs';
 import LaneResizer from './LaneResizer';
 import ZoomControl from './ZoomControl';
 import SearchBox from './SearchBox';
 import LiveClock from './LiveClock';
+import SyncStatus, { StaleBanner } from './SyncStatus';
 import DriverCard from '@/components/cards/DriverCard';
 import CheckOutModal from '@/components/modals/CheckOutModal';
 import AssignModal from '@/components/modals/AssignModal';
@@ -48,11 +60,6 @@ import Portal from '@/components/ui/Portal';
 import NboLogo from '@/components/ui/NboLogo';
 import ThemeToggle from '@/components/ui/ThemeToggle';
 import { logout } from '@/app/login/actions';
-
-interface DispatcherAssignment {
-  lane: string;
-  dispatcher_name: string;
-}
 
 interface BoardProps {
   initialDrivers: Driver[];
@@ -386,24 +393,49 @@ export default function Board({ initialDrivers, initialDispatchers, initialLanes
     if (data) setDrivers(data as Driver[]);
   }, []);
 
+  const fetchDispatchers = useCallback(async () => {
+    if (isDraggingRef.current) return;
+    const { data } = await supabase.from('dispatcher_assignments').select('*');
+    if (data) setDispatchers(data as DispatcherAssignment[]);
+  }, []);
+
+  // ── REALTIME HEALTH ──
+  // The subscription is this board's lifeline, and Supabase never replays the
+  // events a dead socket missed — a screen with a quietly-dropped connection
+  // keeps showing old pixels that read as live (the on-site "nobody is
+  // refreshing" reports). So every channel reports its status here: any
+  // channel leaving SUBSCRIBED marks the board down (SyncStatus surfaces it
+  // after a grace period), and every (re)SUBSCRIBE refetches to close the gap
+  // the outage opened.
+  const channelHealthRef = useRef<Record<string, boolean>>({});
+  const [realtimeDownSince, setRealtimeDownSince] = useState<number | null>(null);
+
+  const trackChannelStatus = useCallback(
+    (name: string, status: string, refetch: () => void) => {
+      const healthy = status === 'SUBSCRIBED';
+      channelHealthRef.current[name] = healthy;
+      const allHealthy = Object.values(channelHealthRef.current).every(Boolean);
+      setRealtimeDownSince((prev) => (allHealthy ? null : prev ?? Date.now()));
+      if (healthy) refetch(); // reconcile whatever a dead socket missed
+    },
+    []
+  );
+
   useEffect(() => {
     const channel = supabase
       .channel('drivers-realtime')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'drivers' }, fetchDrivers)
-      .subscribe();
+      .subscribe((status) => trackChannelStatus('drivers', status, fetchDrivers));
     return () => { supabase.removeChannel(channel); };
-  }, [fetchDrivers]);
+  }, [fetchDrivers, trackChannelStatus]);
 
   useEffect(() => {
     const channel = supabase
       .channel('dispatchers-realtime')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'dispatcher_assignments' }, async () => {
-        const { data } = await supabase.from('dispatcher_assignments').select('*');
-        if (data) setDispatchers(data as DispatcherAssignment[]);
-      })
-      .subscribe();
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'dispatcher_assignments' }, fetchDispatchers)
+      .subscribe((status) => trackChannelStatus('dispatchers', status, fetchDispatchers));
     return () => { supabase.removeChannel(channel); };
-  }, []);
+  }, [fetchDispatchers, trackChannelStatus]);
 
   const fetchLanes = useCallback(async () => {
     if (isDraggingRef.current) return;
@@ -418,9 +450,23 @@ export default function Board({ initialDrivers, initialDispatchers, initialLanes
     const channel = supabase
       .channel('lanes-realtime')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'lanes' }, fetchLanes)
-      .subscribe();
+      .subscribe((status) => trackChannelStatus('lanes', status, fetchLanes));
     return () => { supabase.removeChannel(channel); };
-  }, [fetchLanes]);
+  }, [fetchLanes, trackChannelStatus]);
+
+  // One "get fresh data now" entry point — a wake or refocus can't know what
+  // changed while the device was asleep, so everything refetches.
+  const fetchAll = useCallback(() => {
+    void Promise.all([fetchDrivers(), fetchDispatchers(), fetchLanes()]);
+  }, [fetchDrivers, fetchDispatchers, fetchLanes]);
+
+  // A device waking from sleep must never sit on a pre-sleep board: its socket
+  // died during the nap and the missed events are gone for good.
+  useRefetchOnWake(fetchAll);
+
+  // Prevention half of the same problem — the dispatch board runs on venue TVs
+  // and front-desk laptops that should not sleep mid-shift in the first place.
+  useWakeLock(true);
 
   // Drivers whose lane row is hidden or missing — legacy downtown_hotel rows,
   // or a lane hidden from another device while cards were still in it. They
@@ -444,15 +490,26 @@ export default function Board({ initialDrivers, initialDispatchers, initialLanes
         return m ? { ...d, lane: target.id, lane_order: m.lane_order } : d;
       })
     );
+    let failed: string | null = null;
     try {
-      await Promise.all(
+      const results = await Promise.all(
         moves.map((m) =>
-          supabase.from('drivers').update({ lane: target.id, lane_order: m.lane_order }).eq('id', m.id)
+          supabase
+            .from('drivers')
+            .update({ lane: target.id, lane_order: m.lane_order })
+            .eq('id', m.id)
+            .select('id')
         )
       );
+      failed =
+        results.find((r) => r.error)?.error?.message ??
+        (results.some((r) => !r.error && (r.data?.length ?? 0) === 0)
+          ? 'no rows updated; you may be signed out'
+          : null);
     } finally {
       setPlacingOrphans(false);
     }
+    if (failed) setToast(`Some moves didn't save (${failed}).`);
     await fetchDrivers(); // pick up the trigger-stamped lane_entered_at
   };
 
@@ -676,22 +733,40 @@ export default function Board({ initialDrivers, initialDispatchers, initialLanes
       affectedLanes.includes(d.lane as LaneId)
     );
 
+    // A failed write here used to fail in silence: the optimistic order stayed
+    // on screen and only "moved back" on the next refresh, which on site read
+    // as the board undoing people's work. Say so and resync immediately.
+    // `.select('id')` is how a dead session shows up: RLS makes an anon UPDATE
+    // match zero rows with NO error, so returned-row count is the only signal.
+    let failed: string | null = null;
     try {
-      await Promise.all(
+      const results = await Promise.all(
         toSave.map((d) =>
           supabase
             .from('drivers')
             .update({ lane: d.lane, lane_order: d.lane_order })
             .eq('id', d.id)
+            .select('id')
         )
       );
+      failed =
+        results.find((r) => r.error)?.error?.message ??
+        (results.some((r) => !r.error && (r.data?.length ?? 0) === 0)
+          ? 'no rows updated; you may be signed out'
+          : null);
+    } catch (e) {
+      failed = e instanceof Error ? e.message : 'network error';
     } finally {
       // Hold the guard until every row is written. Each update fires its own
       // realtime event, and a refetch part-way through the burst would read a
       // half-applied ordering and visibly snap cards back to where they were.
-      // Our optimistic state already matches what was written, so there is
-      // nothing to reconcile here — the next change from anyone refetches.
+      // On success the optimistic state already matches what was written, so
+      // there is nothing to reconcile — the next change from anyone refetches.
       releaseGuard();
+    }
+    if (failed) {
+      setToast(`Move didn't save (${failed}). Refreshing the board.`);
+      await fetchDrivers();
     }
   };
 
@@ -735,10 +810,17 @@ export default function Board({ initialDrivers, initialDispatchers, initialLanes
     setDrivers((prev) =>
       prev.map((d) => (d.id === driver.id ? { ...d, location_status: status } : d))
     );
-    await supabase
+    const { data, error } = await supabase
       .from('drivers')
       .update({ location_status: status })
-      .eq('id', driver.id);
+      .eq('id', driver.id)
+      .select('id'); // zero rows back = RLS filtered the write (dead session)
+    if (error || (data?.length ?? 0) === 0) {
+      setToast(
+        `Status didn't save (${error?.message ?? 'you may be signed out'}). Refreshing the board.`
+      );
+      await fetchDrivers();
+    }
   };
 
   // ── MOVE TO LANE (tap alternative to drag — used by the mobile card UI) ──
@@ -753,10 +835,17 @@ export default function Board({ initialDrivers, initialDispatchers, initialLanes
         driver.id
       )
     );
-    await supabase
+    const { data, error } = await supabase
       .from('drivers')
       .update({ lane, lane_order: nextOrder })
-      .eq('id', driver.id);
+      .eq('id', driver.id)
+      .select('id'); // zero rows back = RLS filtered the write (dead session)
+    if (error || (data?.length ?? 0) === 0) {
+      setToast(
+        `Move didn't save (${error?.message ?? 'you may be signed out'}). Refreshing the board.`
+      );
+      await fetchDrivers();
+    }
   };
 
   // ── ASSIGN ──
@@ -921,9 +1010,14 @@ export default function Board({ initialDrivers, initialDispatchers, initialLanes
             >
               + Check In
             </button>
+            <SyncStatus downSince={realtimeDownSince} />
             <LiveClock className="text-lg lg:text-2xl" />
           </div>
         </div>
+
+        {/* The loud half of the staleness story — the header pill is easy to
+            miss from across a room, this isn't. Renders nothing while live. */}
+        <StaleBanner downSince={realtimeDownSince} />
 
         {/* Lane switcher — phones/tablets only */}
         <LaneTabs
