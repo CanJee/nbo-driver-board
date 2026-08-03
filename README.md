@@ -20,6 +20,25 @@ You can start editing the page by modifying `app/page.tsx`. The page auto-update
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
 
+## Viewer mode
+
+`/view` is a read-only copy of the dispatch board for TVs, and for staff who need to see
+the board without touching it. It has its own shared code (`VIEWER_PASSWORD`), entered once
+at `/view/login`; the cookie lasts 180 days so a venue TV is set up once and left alone.
+Rotating `VIEWER_PASSWORD` invalidates every viewer cookie already issued.
+
+What differs from the dispatcher board:
+
+- Nothing can be changed: no drag, no check-in/out, no assign, no notes, no away status.
+- **Driver phone numbers are never sent to the browser**: they are stripped server-side in
+  [`lib/viewer-data.ts`](lib/viewer-data.ts), not merely hidden in the UI.
+- No Supabase session, so no realtime. The board polls `/view/data` every 15s and shows a
+  **Not Live** pill plus a full-width banner if data is more than 45s old, so a screen that
+  has quietly stopped updating can't be mistaken for a current one.
+- It refetches immediately when a device wakes, refocuses, or comes back online, and keeps
+  the screen awake where the browser allows it.
+- Zoom, theme, lane widths and search all still work; they're per-device display settings.
+
 ## Learn More
 
 To learn more about Next.js, take a look at the following resources:

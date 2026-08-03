@@ -18,7 +18,15 @@ import {
 } from '@dnd-kit/core';
 import { arrayMove } from '@dnd-kit/sortable';
 import { createClient } from '@/lib/supabase/client';
-import { AwayReason, Driver, DriverShift, LaneId, LocationStatus, MAIN_LANES } from '@/lib/types';
+import {
+  AwayReason,
+  DispatcherAssignment,
+  Driver,
+  DriverShift,
+  LaneId,
+  LocationStatus,
+  MAIN_LANES,
+} from '@/lib/types';
 import { matchDriver, SearchMatchField, SearchState } from '@/lib/search';
 import {
   DEFAULT_ZOOM,
@@ -30,12 +38,15 @@ import {
   saveZoom,
 } from '@/lib/board-prefs';
 import { useLgUp } from '@/lib/useLgUp';
+import { useRefetchOnWake } from '@/lib/useRefetchOnWake';
+import { useWakeLock } from '@/lib/useWakeLock';
 import SwimLane from './SwimLane';
 import LaneTabs from './LaneTabs';
 import LaneResizer from './LaneResizer';
 import ZoomControl from './ZoomControl';
 import SearchBox from './SearchBox';
 import LiveClock from './LiveClock';
+import SyncStatus, { StaleBanner } from './SyncStatus';
 import DriverCard from '@/components/cards/DriverCard';
 import CheckOutModal from '@/components/modals/CheckOutModal';
 import AssignModal from '@/components/modals/AssignModal';
@@ -46,15 +57,15 @@ import Portal from '@/components/ui/Portal';
 import NboLogo from '@/components/ui/NboLogo';
 import ThemeToggle from '@/components/ui/ThemeToggle';
 import { logout } from '@/app/login/actions';
-
-interface DispatcherAssignment {
-  lane: string;
-  dispatcher_name: string;
-}
+import { viewerLogout } from '@/app/view/login/actions';
 
 interface BoardProps {
   initialDrivers: Driver[];
   initialDispatchers: DispatcherAssignment[];
+  /** Read-only viewer mode: no drags, no writes, no dispatcher-only controls. */
+  readOnly?: boolean;
+  /** False when the server's first data load failed, so the board must not claim to be live. */
+  initialSyncOk?: boolean;
 }
 
 const ALL_LANES: LaneId[] = [...MAIN_LANES, 'meals'];
@@ -75,6 +86,16 @@ const DEFAULT_ROWS_PER_COL = 12;
 const DEFAULT_COL_BUDGET = 8;
 // A single very full lane shouldn't be allowed to starve the other four.
 const MAX_LANE_COLS = 3;
+
+// Viewer mode has no realtime subscription (no Supabase session), so it polls.
+// 15s is well inside the 45s staleness threshold, leaving room for two misses
+// before the board admits it isn't live.
+const VIEW_POLL_MS = 15_000;
+// A TV with a mouse plugged in shouldn't show a parked cursor all tournament.
+const CURSOR_IDLE_MS = 5_000;
+// Module-level so the identity is stable — a fresh [] each render would make
+// DndContext re-create its sensor bindings on every pass.
+const NO_SENSORS: ReturnType<typeof useSensors> = [];
 
 /** A CSS length token off :root, in layout px. globals.css owns the values. */
 function rootPx(name: string, fallback: number): number {
@@ -199,7 +220,12 @@ function reorderForDrop(
   return fromLane === targetLane ? next : renumberLanes(next, [fromLane]);
 }
 
-export default function Board({ initialDrivers, initialDispatchers }: BoardProps) {
+export default function Board({
+  initialDrivers,
+  initialDispatchers,
+  readOnly = false,
+  initialSyncOk = true,
+}: BoardProps) {
   const [drivers, setDrivers] = useState<Driver[]>(initialDrivers);
   const [dispatchers, setDispatchers] = useState<DispatcherAssignment[]>(initialDispatchers);
   const [activeDriver, setActiveDriver] = useState<Driver | null>(null);
@@ -357,15 +383,80 @@ export default function Board({ initialDrivers, initialDispatchers }: BoardProps
     if (data) setDrivers(data as Driver[]);
   }, []);
 
+  // ── VIEWER SYNC ──
+  // Viewers hold no Supabase session, so RLS gives them nothing and realtime
+  // never fires for them; the read-only board polls its own cookie-gated
+  // endpoint instead (see lib/supabase/service.ts for why it can't use anon).
+  const [lastSyncAt, setLastSyncAt] = useState<number | null>(null);
+  const seenRevRef = useRef<string | null>(null);
+
+  const refreshViewer = useCallback(async () => {
+    try {
+      const res = await fetch('/view/data', { cache: 'no-store' });
+      // Cookie expired or the viewer code was rotated mid-session.
+      if (res.status === 401) {
+        window.location.assign('/view/login');
+        return;
+      }
+      if (!res.ok) return;
+      const json = (await res.json()) as {
+        drivers: Driver[];
+        dispatchers: DispatcherAssignment[];
+        rev: string;
+      };
+      // A TV left up for a week would otherwise stay on whatever code it loaded
+      // on day one. The build's commit sha changing is the signal to reload.
+      if (seenRevRef.current === null) {
+        seenRevRef.current = json.rev;
+      } else if (json.rev !== seenRevRef.current) {
+        window.location.reload();
+        return;
+      }
+      setDrivers(json.drivers);
+      setDispatchers(json.dispatchers);
+      setLastSyncAt(Date.now());
+    } catch {
+      // Keep the last known board on screen: SyncStatus announces that it is no
+      // longer live, which is more use than blanking cards someone is reading.
+    }
+  }, []);
+
+  // The single "get fresh data now" entry point, whichever mode we're in.
+  const refresh = useCallback(() => {
+    if (readOnly) void refreshViewer();
+    else void fetchDrivers();
+  }, [readOnly, refreshViewer, fetchDrivers]);
+
   useEffect(() => {
+    if (!readOnly) return;
+    // The server-rendered rows were fresh as of mount, unless that load failed.
+    // Stamped client-side rather than passed in, so server/client clock skew
+    // can't make a fresh board look stale (or the reverse).
+    if (initialSyncOk) setLastSyncAt(Date.now());
+    // Sync immediately as well: it proves the browser can actually reach the
+    // endpoint, so a broken poll shows up now instead of 45 seconds from now.
+    void refreshViewer();
+    const id = setInterval(() => void refreshViewer(), VIEW_POLL_MS);
+    return () => clearInterval(id);
+  }, [readOnly, initialSyncOk, refreshViewer]);
+
+  // Both modes: a device waking from sleep must never sit on a pre-sleep board.
+  useRefetchOnWake(refresh);
+
+  // Viewer only — a screen that stays awake can't be misread after a nap.
+  useWakeLock(readOnly);
+
+  useEffect(() => {
+    if (readOnly) return;
     const channel = supabase
       .channel('drivers-realtime')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'drivers' }, fetchDrivers)
       .subscribe();
     return () => { supabase.removeChannel(channel); };
-  }, [fetchDrivers]);
+  }, [fetchDrivers, readOnly]);
 
   useEffect(() => {
+    if (readOnly) return;
     const channel = supabase
       .channel('dispatchers-realtime')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'dispatcher_assignments' }, async () => {
@@ -374,7 +465,26 @@ export default function Board({ initialDrivers, initialDispatchers }: BoardProps
       })
       .subscribe();
     return () => { supabase.removeChannel(channel); };
-  }, []);
+  }, [readOnly]);
+
+  // Cursor auto-hide (viewer only): a TV with a mouse attached shouldn't show a
+  // parked pointer over the board for the rest of the tournament.
+  const [cursorIdle, setCursorIdle] = useState(false);
+  useEffect(() => {
+    if (!readOnly) return;
+    let timer: ReturnType<typeof setTimeout>;
+    const arm = () => {
+      setCursorIdle(false);
+      clearTimeout(timer);
+      timer = setTimeout(() => setCursorIdle(true), CURSOR_IDLE_MS);
+    };
+    arm();
+    window.addEventListener('mousemove', arm);
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener('mousemove', arm);
+    };
+  }, [readOnly]);
 
   // A lane's order exactly as it is rendered — and the single list the drag
   // handlers reorder against. Ordering is purely lane_order: an earlier version
@@ -474,7 +584,12 @@ export default function Board({ initialDrivers, initialDispatchers }: BoardProps
   };
 
   // ── DRAG START ──
+  // Every handler below re-checks readOnly. Viewer mode already ships no drag
+  // sensors and no buttons that call these, so the guards are belt and braces:
+  // the board is the one component both modes share, and a future edit that
+  // renders a control in the wrong branch should do nothing rather than write.
   const handleDragStart = (event: DragStartEvent) => {
+    if (readOnly) return;
     isDraggingRef.current = true;
     const driver = drivers.find((d) => d.id === event.active.id);
     if (driver) {
@@ -485,6 +600,7 @@ export default function Board({ initialDrivers, initialDispatchers }: BoardProps
 
   // ── DRAG OVER (live preview while hovering) ──
   const handleDragOver = (event: DragOverEvent) => {
+    if (readOnly) return;
     const { active, over } = event;
     if (!over) return;
 
@@ -518,6 +634,7 @@ export default function Board({ initialDrivers, initialDispatchers }: BoardProps
 
   // ── DRAG END ──
   const handleDragEnd = async (event: DragEndEvent) => {
+    if (readOnly) return;
     setActiveDriver(null);
     const { active, over } = event;
 
@@ -598,7 +715,7 @@ export default function Board({ initialDrivers, initialDispatchers }: BoardProps
 
   // ── CHECK OUT ──
   const handleCheckOut = async () => {
-    if (!checkOutDriver) return;
+    if (readOnly || !checkOutDriver) return;
     const { error } = await supabase
       .from('drivers')
       .update({ checked_out_at: new Date().toISOString() })
@@ -612,6 +729,7 @@ export default function Board({ initialDrivers, initialDispatchers }: BoardProps
 
   // ── UPDATE NOTES ──
   const handleUpdateNotes = async (driver: Driver, notes: string) => {
+    if (readOnly) return;
     await supabase
       .from('drivers')
       .update({ notes: notes || null })
@@ -621,6 +739,7 @@ export default function Board({ initialDrivers, initialDispatchers }: BoardProps
 
   // ── SET AWAY ──
   const handleSetAway = async (driver: Driver, reason: AwayReason | null) => {
+    if (readOnly) return;
     await supabase
       .from('drivers')
       .update({
@@ -633,6 +752,7 @@ export default function Board({ initialDrivers, initialDispatchers }: BoardProps
 
   // ── SET LOCATION STATUS ──
   const handleSetLocationStatus = async (driver: Driver, status: LocationStatus | null) => {
+    if (readOnly) return;
     setDrivers((prev) =>
       prev.map((d) => (d.id === driver.id ? { ...d, location_status: status } : d))
     );
@@ -644,7 +764,7 @@ export default function Board({ initialDrivers, initialDispatchers }: BoardProps
 
   // ── MOVE TO LANE (tap alternative to drag — used by the mobile card UI) ──
   const handleMoveToLane = async (driver: Driver, lane: LaneId) => {
-    if (driver.lane === lane) return;
+    if (readOnly || driver.lane === lane) return;
     // Append at the end of the target lane; gaps left in the source lane's
     // ordering are harmless (order is only used relatively).
     const nextOrder = nextLaneOrder(drivers, lane);
@@ -665,7 +785,7 @@ export default function Board({ initialDrivers, initialDispatchers }: BoardProps
   // driver counts as assigned. walkie_number is left out of the payload rather
   // than nulled, so any historical value on the row survives.
   const handleAssign = async (carNumber: string) => {
-    if (!assignDriver) return;
+    if (readOnly || !assignDriver) return;
     await supabase
       .from('drivers')
       .update({
@@ -679,6 +799,7 @@ export default function Board({ initialDrivers, initialDispatchers }: BoardProps
 
   // ── CHECK IN ──
   const handleCheckIn = async (data: CheckInData) => {
+    if (readOnly) return;
     // A fresh arrival always joins the back of the queue.
     const nextOrder = nextLaneOrder(drivers, data.lane);
 
@@ -713,7 +834,10 @@ export default function Board({ initialDrivers, initialDispatchers }: BoardProps
 
   return (
     <DndContext
-      sensors={sensors}
+      // No sensors in viewer mode, so a drag can never start in the first place
+      // (the cards also render no grip and pass disabled to useSortable). The
+      // context itself stays mounted because useSortable requires an ancestor.
+      sensors={readOnly ? NO_SENSORS : sensors}
       collisionDetection={(args) => {
         // pointerWithin checks if the pointer is inside any droppable rect (fixes top-of-lane drops)
         const pointerCollisions = pointerWithin(args);
@@ -728,8 +852,17 @@ export default function Board({ initialDrivers, initialDispatchers }: BoardProps
       autoScroll={!isLgUp || zoom === DEFAULT_ZOOM}
     >
       <div
-        className="flex flex-col h-dvh p-2 gap-2 lg:p-3 lg:gap-3 relative"
-        style={{ backgroundColor: 'var(--surface-page)', '--board-zoom': zoom / 100 } as React.CSSProperties}
+        className={`flex flex-col h-dvh p-2 gap-2 lg:p-3 lg:gap-3 relative ${
+          cursorIdle ? 'cursor-idle' : ''
+        }`}
+        style={{
+          backgroundColor: 'var(--surface-page)',
+          '--board-zoom': zoom / 100,
+          // Viewer cards get a fatter shift stripe: on a TV across a room the
+          // colour is the thing people read first, and there is no drag handle
+          // competing for the same edge. Dispatch keeps the card's 6px default.
+          ...(readOnly ? { '--shift-bar-w': '12px' } : {}),
+        } as React.CSSProperties}
       >
 
         {/* Header — compact single row on phones, full title from md up.
@@ -747,8 +880,23 @@ export default function Board({ initialDrivers, initialDispatchers }: BoardProps
           <h1 className="hidden md:block flex-shrink-0 text-base lg:text-xl font-bold text-fg-strong tracking-wide text-center whitespace-nowrap">
             Transportation Dispatch{' '}
             <span className="font-light text-fg-muted">—</span>{' '}
-            <span style={{ color: 'var(--brand)' }}>Live Status</span>
+            <span style={{ color: 'var(--brand)' }}>{readOnly ? 'Board' : 'Live Status'}</span>
           </h1>
+          {/* Says up front why nothing on this screen responds, so nobody stands
+              at the TV wondering why a card won't drag. Shown at every width,
+              including phones where the title itself is hidden. */}
+          {readOnly && (
+            <span
+              className="flex-shrink-0 px-2 py-1 rounded-full text-[10px] lg:text-xs font-bold uppercase tracking-widest whitespace-nowrap"
+              style={{
+                border: '1px solid var(--status-warn)',
+                color: 'var(--status-warn-fg)',
+                backgroundColor: 'var(--status-warn-bg)',
+              }}
+            >
+              View Only
+            </span>
+          )}
           <div className="flex items-center justify-end gap-1.5 lg:gap-3 xl:flex-1 xl:basis-0">
             {/* Search entry points by breakpoint: inline input at xl+; header
                 icon toggle for lg–xl (LaneTabs is hidden there); below lg the
@@ -775,25 +923,37 @@ export default function Board({ initialDrivers, initialDispatchers }: BoardProps
             >
               <Search size={16} />
             </button>
+            {/* Zoom, theme and search stay in viewer mode: they change only what
+                this one screen shows, which is exactly how a TV gets tuned once
+                and left alone (the prefs are per-device localStorage). */}
             <ZoomControl value={zoom} onChange={handleZoomChange} />
             <ThemeToggle />
-            <Link
-              href="/import"
-              className="px-2 lg:px-3 py-1.5 rounded-lg text-xs font-bold tracking-widest uppercase text-fg-soft hover:text-fg-strong transition-colors whitespace-nowrap"
-              style={{ border: '1px solid var(--edge)' }}
-            >
-              Import
-            </Link>
-            <button
-              onClick={() => setShowCheckIn(true)}
-              className="px-2.5 lg:px-4 py-1.5 rounded-lg text-xs font-black tracking-widest uppercase text-white transition-opacity hover:opacity-80 whitespace-nowrap"
-              style={{ backgroundColor: 'var(--brand)', border: '1px solid var(--brand)' }}
-            >
-              + Check In
-            </button>
+            {!readOnly && (
+              <>
+                <Link
+                  href="/import"
+                  className="px-2 lg:px-3 py-1.5 rounded-lg text-xs font-bold tracking-widest uppercase text-fg-soft hover:text-fg-strong transition-colors whitespace-nowrap"
+                  style={{ border: '1px solid var(--edge)' }}
+                >
+                  Import
+                </Link>
+                <button
+                  onClick={() => setShowCheckIn(true)}
+                  className="px-2.5 lg:px-4 py-1.5 rounded-lg text-xs font-black tracking-widest uppercase text-white transition-opacity hover:opacity-80 whitespace-nowrap"
+                  style={{ backgroundColor: 'var(--brand)', border: '1px solid var(--brand)' }}
+                >
+                  + Check In
+                </button>
+              </>
+            )}
+            {readOnly && <SyncStatus lastSyncAt={lastSyncAt} />}
             <LiveClock className="text-lg lg:text-2xl" />
           </div>
         </div>
+
+        {/* The loud half of the staleness story — the header pill is easy to
+            miss from across a room, this isn't. Renders nothing while live. */}
+        {readOnly && <StaleBanner lastSyncAt={lastSyncAt} />}
 
         {/* Lane switcher — phones/tablets only */}
         <LaneTabs
@@ -865,6 +1025,7 @@ export default function Board({ initialDrivers, initialDispatchers }: BoardProps
                 onSetLocationStatus={handleSetLocationStatus}
                 onMoveToLane={handleMoveToLane}
                 search={search}
+                readOnly={readOnly}
                 gridMode={isLgUp}
                 // Width weight and column count are the same number, so a lane
                 // is always exactly as wide as the columns it is showing.
@@ -883,12 +1044,15 @@ export default function Board({ initialDrivers, initialDispatchers }: BoardProps
         </div>
         {/* Footer */}
         <div className="absolute bottom-0 left-0 right-0 flex items-center justify-between px-4 py-1.5 pointer-events-none">
-          <form action={logout} className="pointer-events-auto">
+          {/* Viewers get their own exit, which clears the viewer cookie rather
+              than a dispatcher session they never had. A TV simply never taps
+              it; it's here for people watching on their own phone. */}
+          <form action={readOnly ? viewerLogout : logout} className="pointer-events-auto">
             <button
               type="submit"
               className="text-[10px] font-bold uppercase tracking-widest text-fg-ghost hover:text-fg-muted transition-colors"
             >
-              Sign Out
+              {readOnly ? 'Exit' : 'Sign Out'}
             </button>
           </form>
           <p className="text-[10px] text-fg-ghost tracking-wide">

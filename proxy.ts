@@ -1,8 +1,29 @@
 import { createServerClient } from '@supabase/ssr';
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
+import { VIEWER_COOKIE, isValidViewerToken } from '@/lib/viewer-auth';
 
 export async function proxy(request: NextRequest) {
+  const path = request.nextUrl.pathname;
+  const isViewerPath = path === '/view' || path.startsWith('/view/');
+  const isViewerLogin = path === '/view/login';
+  const hasViewerCookie = await isValidViewerToken(request.cookies.get(VIEWER_COOKIE)?.value);
+
+  // ── Viewer (read-only) board ──
+  // Handled ahead of the dispatcher session check so a venue TV never pays for a
+  // Supabase round-trip, and so viewers are sent to their own login rather than
+  // the dispatcher one.
+  if (isViewerLogin) {
+    // GET only: bouncing a POST here would swallow the login server action.
+    if (request.method === 'GET' && hasViewerCookie) {
+      return NextResponse.redirect(new URL('/view', request.url));
+    }
+    return NextResponse.next({ request });
+  }
+  if (isViewerPath && hasViewerCookie) {
+    return NextResponse.next({ request });
+  }
+
   let response = NextResponse.next({ request });
 
   const supabase = createServerClient(
@@ -29,7 +50,13 @@ export async function proxy(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  const isLoginPage = request.nextUrl.pathname === '/login';
+  const isLoginPage = path === '/login';
+
+  // A signed-in dispatcher can open /view without also knowing the viewer code;
+  // anyone else asking for it is sent to the viewer login, not the staff one.
+  if (!user && isViewerPath) {
+    return NextResponse.redirect(new URL('/view/login', request.url));
+  }
 
   if (!user && !isLoginPage) {
     return NextResponse.redirect(new URL('/login', request.url));

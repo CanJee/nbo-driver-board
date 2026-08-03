@@ -155,6 +155,13 @@ interface DriverCardProps {
   searchHit?: SearchMatchField | null;
   /** True when a search is active and this card is NOT a hit (fades it out). */
   searchDim?: boolean;
+  /**
+   * Viewer mode: the card shows information and nothing else. No drag handle,
+   * no editing, and no phone number — viewer rows arrive with `phone` already
+   * blanked by the server (see lib/viewer-data.ts), so there is nothing to show
+   * and the field is skipped rather than rendered as an empty row.
+   */
+  readOnly?: boolean;
 }
 
 export default function DriverCard({
@@ -168,6 +175,7 @@ export default function DriverCard({
   isDragOverlay = false,
   searchHit = null,
   searchDim = false,
+  readOnly = false,
 }: DriverCardProps) {
   const [expanded, setExpanded] = useState(false);
   const [editingNotes, setEditingNotes] = useState(false);
@@ -189,6 +197,7 @@ export default function DriverCard({
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: driver.id,
     data: { driver },
+    disabled: readOnly,
   });
 
   const isUnassigned = driver.status === 'unassigned';
@@ -221,7 +230,9 @@ export default function DriverCard({
     borderBottom: isUnassigned ? '2px dashed var(--status-warn)' : '1px solid var(--edge)',
     borderRadius: '6px',
     backgroundColor: 'var(--surface-card)',
-    paddingLeft: '6px',
+    // Matches the shift bar's width exactly — Board widens both at once in
+    // viewer mode by setting --shift-bar-w on the board root.
+    paddingLeft: 'var(--shift-bar-w, 6px)',
     // Search hits get the amber ring + glow (same family as the hover glow)
     ...(searchHit ? { boxShadow: '0 0 0 2px var(--status-warn), 0 0 10px var(--card-glow)' } : {}),
   };
@@ -251,7 +262,9 @@ export default function DriverCard({
           left: 0,
           top: 0,
           bottom: 0,
-          width: '6px',
+          // Wider on the viewer board, where the colour is what people read
+          // first from across a room and no drag handle shares the edge.
+          width: 'var(--shift-bar-w, 6px)',
           borderTopLeftRadius: '6px',
           borderBottomLeftRadius: '6px',
           background: shiftBarBackground(barColors),
@@ -263,16 +276,20 @@ export default function DriverCard({
         // min-h (not fixed h) so the search snippet line can grow the card;
         // the drag handle uses self-stretch because h-full needs a fixed parent.
         <div className="flex items-center min-h-[60px]">
+          {/* No handle in viewer mode: nothing here can be dragged, and the
+              space it frees goes to the name, which is what a TV needs most. */}
+          {!readOnly && (
+            <div
+              {...attributes}
+              {...listeners}
+              suppressHydrationWarning
+              className="flex items-center justify-center w-7 self-stretch cursor-grab active:cursor-grabbing text-fg-ghost hover:text-fg-muted flex-shrink-0 touch-none"
+            >
+              <GripVertical size={15} />
+            </div>
+          )}
           <div
-            {...attributes}
-            {...listeners}
-            suppressHydrationWarning
-            className="flex items-center justify-center w-7 self-stretch cursor-grab active:cursor-grabbing text-fg-ghost hover:text-fg-muted flex-shrink-0 touch-none"
-          >
-            <GripVertical size={15} />
-          </div>
-          <div
-            className="flex-1 py-2 pr-3 cursor-pointer min-w-0"
+            className={`flex-1 py-2 pr-3 cursor-pointer min-w-0 ${readOnly ? 'pl-2.5' : ''}`}
             onClick={() => setExpanded(true)}
           >
             {/* The name gets the full width of the card. The status badges used
@@ -319,7 +336,7 @@ export default function DriverCard({
             </div>
             {/* Phone and notes aren't visible on collapsed cards, so when the
                 search matched one of them, say why this card lit up */}
-            {searchHit === 'phone' && (
+            {searchHit === 'phone' && !readOnly && (
               <div className="text-[11px] mt-0.5 truncate" style={{ color: 'var(--status-warn-fg)' }}>
                 Phone: {driver.phone}
               </div>
@@ -340,14 +357,16 @@ export default function DriverCard({
           {/* Name + drag + collapse */}
           <div className="flex items-center justify-between mb-2">
             <div className="flex items-center gap-1.5 min-w-0">
-              <div
-                {...attributes}
-                {...listeners}
-                suppressHydrationWarning
-                className="cursor-grab active:cursor-grabbing text-fg-ghost hover:text-fg-muted flex-shrink-0 touch-none"
-              >
-                <GripVertical size={14} />
-              </div>
+              {!readOnly && (
+                <div
+                  {...attributes}
+                  {...listeners}
+                  suppressHydrationWarning
+                  className="cursor-grab active:cursor-grabbing text-fg-ghost hover:text-fg-muted flex-shrink-0 touch-none"
+                >
+                  <GripVertical size={14} />
+                </div>
+              )}
               <span className="text-base font-bold text-fg-strong truncate">{driver.name}</span>
             </div>
             <button
@@ -373,14 +392,19 @@ export default function DriverCard({
                   </span>
                 )}
               </div>
-              <button
-                onClick={() => onAssign(driver)}
-                className="flex items-center gap-1 text-[10px] text-fg-faint hover:text-accent-blue transition-colors ml-2 flex-shrink-0"
-              >
-                <Pencil size={11} /><span>Edit</span>
-              </button>
+              {!readOnly && (
+                <button
+                  onClick={() => onAssign(driver)}
+                  className="flex items-center gap-1 text-[10px] text-fg-faint hover:text-accent-blue transition-colors ml-2 flex-shrink-0"
+                >
+                  <Pencil size={11} /><span>Edit</span>
+                </button>
+              )}
             </div>
-            <CopyablePhone phone={driver.phone} />
+            {/* Phone numbers never reach viewer mode at all — the server blanks
+                the field before the rows are serialised, so there is nothing to
+                copy and nothing sitting in the page for someone to dig out. */}
+            {!readOnly && <CopyablePhone phone={driver.phone} />}
           </div>
 
           {/* Today's shifts */}
@@ -416,6 +440,7 @@ export default function DriverCard({
               The collapsed card already renders the badge ungated, so hiding
               only the control could also strand a card showing EN ROUTE with no
               way to clear it. */}
+          {!readOnly && (
           <div className="mb-3">
             <div className="text-[10px] font-bold tracking-widest uppercase text-fg-faint mb-1.5">
               Location Status
@@ -447,8 +472,12 @@ export default function DriverCard({
               </button>
             </div>
           </div>
+          )}
 
-          {/* Away Status */}
+          {/* Away Status — in viewer mode this is pure status, so the section
+              only appears when the driver is actually away; the whole "set them
+              away" grid has nothing to offer someone who can't set anything. */}
+          {(!readOnly || isAway) && (
           <div className="mb-3">
             <div className="text-[10px] font-bold tracking-widest uppercase text-fg-faint mb-1.5">
               Away Status
@@ -459,13 +488,15 @@ export default function DriverCard({
                   {driver.away_reason && AWAY_ICONS[driver.away_reason]}{' '}
                   <span className="text-fg-soft">{driver.away_reason && AWAY_LABELS[driver.away_reason]}</span>
                 </span>
-                <button
-                  onClick={() => onSetAway(driver, null)}
-                  className="text-[11px] font-bold px-2.5 py-1 rounded text-white ml-auto"
-                  style={{ backgroundColor: 'var(--status-success)' }}
-                >
-                  ✓ Returned
-                </button>
+                {!readOnly && (
+                  <button
+                    onClick={() => onSetAway(driver, null)}
+                    className="text-[11px] font-bold px-2.5 py-1 rounded text-white ml-auto"
+                    style={{ backgroundColor: 'var(--status-success)' }}
+                  >
+                    ✓ Returned
+                  </button>
+                )}
               </div>
             ) : (
               // Equal-width columns that share whatever width the card has,
@@ -492,9 +523,11 @@ export default function DriverCard({
               </div>
             )}
           </div>
+          )}
 
           {/* Move to lane — tap alternative to dragging across the snap board.
               Hidden at lg+ where all lanes are on screen and mouse-drag is easy. */}
+          {!readOnly && (
           <div className="mb-3 lg:hidden">
             <div className="text-[10px] font-bold tracking-widest uppercase text-fg-faint mb-1.5">
               Move To
@@ -512,12 +545,16 @@ export default function DriverCard({
               ))}
             </div>
           </div>
+          )}
 
-          {/* Notes */}
+          {/* Notes — read-only viewers see a note when there is one, and no
+              section at all when there isn't (an empty box that can't be filled
+              in is just wasted card height on a TV). */}
+          {(!readOnly || Boolean(driver.notes)) && (
           <div className="mb-3">
             <div className="flex items-center justify-between mb-1">
               <span className="text-[10px] font-bold tracking-widest uppercase text-fg-faint">Notes</span>
-              {!editingNotes && (
+              {!readOnly && !editingNotes && (
                 <button
                   onClick={() => setEditingNotes(true)}
                   className="flex items-center gap-1 text-[10px] text-fg-faint hover:text-accent-blue transition-colors"
@@ -526,7 +563,7 @@ export default function DriverCard({
                 </button>
               )}
             </div>
-            {editingNotes ? (
+            {editingNotes && !readOnly ? (
               <div>
                 <textarea
                   ref={notesRef}
@@ -555,17 +592,22 @@ export default function DriverCard({
               </div>
             ) : (
               <div
-                className="text-sm text-fg-soft rounded p-2 min-h-[40px] leading-relaxed cursor-text"
+                className={`text-sm text-fg-soft rounded p-2 min-h-[40px] leading-relaxed ${
+                  readOnly ? '' : 'cursor-text'
+                }`}
                 style={{ backgroundColor: 'var(--surface-input)', border: '1px solid var(--edge)' }}
-                onClick={() => setEditingNotes(true)}
+                onClick={readOnly ? undefined : () => setEditingNotes(true)}
               >
-                {driver.notes || <span className="text-fg-ghost italic">Click to add notes...</span>}
+                {driver.notes ||
+                  (readOnly ? null : <span className="text-fg-ghost italic">Click to add notes...</span>)}
               </div>
             )}
           </div>
+          )}
 
           {/* Action buttons — wrap rather than squash when a narrow card can't
               fit ASSIGN and CHECK OUT on one line. */}
+          {!readOnly && (
           <div className="flex flex-wrap items-center gap-2">
             {isUnassigned && (
               <button
@@ -586,6 +628,7 @@ export default function DriverCard({
               </button>
             </div>
           </div>
+          )}
         </div>
       )}
     </div>

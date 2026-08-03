@@ -16,6 +16,8 @@ interface SwimLaneProps {
   style?: React.CSSProperties;
   /** Cards wrap into multiple columns (desktop/TV); off on phones. */
   gridMode?: boolean;
+  /** Read-only viewer mode — passed straight through to the cards. */
+  readOnly?: boolean;
   search: SearchState | null;
   onCheckOut: (driver: Driver) => void;
   onAssign: (driver: Driver) => void;
@@ -32,6 +34,7 @@ export default function SwimLane({
   className = '',
   style,
   gridMode = false,
+  readOnly = false,
   search,
   onCheckOut,
   onAssign,
@@ -106,6 +109,7 @@ export default function SwimLane({
                 driver={driver}
                 searchHit={search ? (search.matches.get(driver.id) ?? null) : null}
                 searchDim={search !== null && !search.matches.has(driver.id)}
+                readOnly={readOnly}
                 onCheckOut={onCheckOut}
                 onAssign={onAssign}
                 onUpdateNotes={onUpdateNotes}

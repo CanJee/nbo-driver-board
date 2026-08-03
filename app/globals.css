@@ -287,6 +287,14 @@ body {
   }
 }
 
+/* Viewer mode parks the cursor out of sight after a few idle seconds, so a TV
+   with a mouse plugged into it isn't showing a stray pointer all tournament.
+   Any mouse movement removes the class again. */
+.cursor-idle,
+.cursor-idle * {
+  cursor: none;
+}
+
 /* Card hover glow */
 .card-glow:hover {
   box-shadow: 0 0 10px var(--card-glow);

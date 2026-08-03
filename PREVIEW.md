@@ -42,12 +42,21 @@ live prod. (Production deploys are unchanged: they use the prod project.)
    - `PROD_SUPABASE_URL` = the prod project URL
    - `PROD_SUPABASE_SERVICE_ROLE_KEY` = the prod project's service-role key
    - `PREVIEW_DISPATCHER_PASSWORD` = a password you'll use to log in on preview deploys
+   - `VIEWER_PASSWORD` = the code for the read-only board at `/view`
    (`PROD_*` are the clone *source*. Do **not** add them to Production scope.)
 4. **Vercel → Production scope:** keep `NEXT_PUBLIC_SUPABASE_URL` and
    `NEXT_PUBLIC_SUPABASE_ANON_KEY` pointed at prod, as today.
 
 `vercel.json` makes Vercel use the build script automatically — no Vercel build-setting
 changes needed.
+
+## Viewer mode on previews
+
+`/view` reads through the service-role key rather than the visitor's session (viewers have
+no Supabase session, and RLS admits `authenticated` only). On previews that key is the
+`SUPABASE_SERVICE_ROLE_KEY` the Supabase–Vercel integration injects, which points at the
+**branch DB**, so preview viewers see preview data, never prod. Nothing extra to configure
+beyond `VIEWER_PASSWORD` above.
 
 ## Keeping schema in sync
 
