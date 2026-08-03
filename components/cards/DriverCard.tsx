@@ -4,13 +4,11 @@ import { useEffect, useRef, useState } from 'react';
 import { Check, ChevronUp, Copy, GripVertical, Pencil, Save, X } from 'lucide-react';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { AwayReason, Driver, LaneId, LocationStatus, MAIN_LANES, SHIFT_COLORS, SHIFT_LABELS, LANE_LABELS, AWAY_ICONS, AWAY_LABELS, AWAY_SHORT_LABELS } from '@/lib/types';
+import { AwayReason, Driver, Lane, LaneId, LocationStatus, SHIFT_COLORS, SHIFT_LABELS, AWAY_ICONS, AWAY_LABELS, AWAY_SHORT_LABELS } from '@/lib/types';
+import { activeLanes, laneLabel } from '@/lib/lanes';
 import { copyToClipboard } from '@/lib/clipboard';
 import { formatClockTime, formatDurationShort } from '@/lib/date';
 import { SearchMatchField } from '@/lib/search';
-
-// Same lane set the board renders — targets for the mobile "Move to" buttons.
-const MOVE_LANES: LaneId[] = [...MAIN_LANES, 'meals'];
 
 // Minute-granularity display, so re-rendering twice a minute is enough to keep
 // it honest. The component only exists while a card is expanded.
@@ -99,7 +97,7 @@ function CopyablePhone({ phone }: { phone: string }) {
  * Renders nothing when the stamp is missing or unparseable, which is what lets
  * the UI ship before the migration has been run against prod.
  */
-function TimeInLane({ driver }: { driver: Driver }) {
+function TimeInLane({ driver, label }: { driver: Driver; label: string }) {
   // Elapsed time depends on the client clock, so there is no correct value to
   // render on the server. Staying null until mounted keeps the first client
   // render identical to the server's (the guard LiveClock and ThemeToggle use).
@@ -119,7 +117,7 @@ function TimeInLane({ driver }: { driver: Driver }) {
   return (
     <div className="mb-3">
       <div className="text-[10px] font-bold tracking-widest uppercase text-fg-faint mb-1.5">
-        In {LANE_LABELS[driver.lane]}
+        In {label}
       </div>
       <div className="text-sm text-fg-soft">
         <span className="text-fg-strong font-medium tabular-nums">
@@ -144,6 +142,8 @@ function shiftBarBackground(colors: string[]): string {
 
 interface DriverCardProps {
   driver: Driver;
+  /** Every lane row (hidden included): labels must resolve for legacy lanes. */
+  lanes: Lane[];
   onCheckOut: (driver: Driver) => void;
   onAssign: (driver: Driver) => void;
   onUpdateNotes: (driver: Driver, notes: string) => void;
@@ -159,6 +159,7 @@ interface DriverCardProps {
 
 export default function DriverCard({
   driver,
+  lanes,
   onCheckOut,
   onAssign,
   onUpdateNotes,
@@ -359,7 +360,7 @@ export default function DriverCard({
           </div>
 
           {/* Time in the current lane */}
-          <TimeInLane driver={driver} />
+          <TimeInLane driver={driver} label={laneLabel(lanes, driver.lane)} />
 
           {/* Car / Phone */}
           <div className="mb-3 space-y-1">
@@ -401,7 +402,7 @@ export default function DriverCard({
                     />
                     <span className="font-semibold text-fg-strong">{SHIFT_LABELS[s.shift_type]}</span>
                     {s.label && <span className="text-fg-muted whitespace-nowrap">{s.label}</span>}
-                    <span className="text-fg-faint whitespace-nowrap">· {LANE_LABELS[s.lane]}</span>
+                    <span className="text-fg-faint whitespace-nowrap">· {laneLabel(lanes, s.lane)}</span>
                   </div>
                 ))}
               </div>
@@ -500,14 +501,14 @@ export default function DriverCard({
               Move To
             </div>
             <div className="flex flex-wrap gap-1.5">
-              {MOVE_LANES.filter((l) => l !== driver.lane).map((l) => (
+              {activeLanes(lanes).filter((l) => l.id !== driver.lane).map((l) => (
                 <button
-                  key={l}
-                  onClick={() => onMoveToLane(driver, l)}
+                  key={l.id}
+                  onClick={() => onMoveToLane(driver, l.id)}
                   className="px-2.5 py-1.5 rounded text-[11px] font-bold text-fg-soft transition-colors hover:bg-black/5 dark:hover:bg-white/10"
                   style={{ border: '1px solid var(--edge-muted)' }}
                 >
-                  {LANE_LABELS[l]} →
+                  {l.label} →
                 </button>
               ))}
             </div>

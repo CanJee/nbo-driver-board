@@ -1,10 +1,10 @@
 'use client';
 
 import { Search } from 'lucide-react';
-import { LANE_LABELS, LaneId } from '@/lib/types';
+import { Lane } from '@/lib/types';
 
 interface LaneTabsProps {
-  lanes: LaneId[];
+  lanes: Lane[];
   counts: number[];
   /** Per-lane search hits; when set, badges show hits (amber) instead of
    *  totals so off-screen lanes with matches are findable on the snap board. */
@@ -42,7 +42,7 @@ export default function LaneTabs({ lanes, counts, matchCounts, activeIdx, onSele
         const active = i === activeIdx;
         return (
           <button
-            key={lane}
+            key={lane.id}
             type="button"
             onClick={() => onSelect(i)}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-bold uppercase tracking-wider whitespace-nowrap transition-colors"
@@ -52,7 +52,7 @@ export default function LaneTabs({ lanes, counts, matchCounts, activeIdx, onSele
               color: active ? '#fff' : 'var(--fg-muted)',
             }}
           >
-            {LANE_LABELS[lane]}
+            {lane.label}
             <span
               className="text-[10px] font-black rounded-full min-w-[18px] h-[18px] px-1 flex items-center justify-center"
               style={

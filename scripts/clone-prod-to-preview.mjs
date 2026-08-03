@@ -12,8 +12,9 @@
  */
 import { createClient } from '@supabase/supabase-js';
 
-// FK-safe insert order: drivers.roster_id references roster(id), so roster first.
-const TABLES = ['roster', 'dispatcher_assignments', 'drivers'];
+// FK-safe insert order: drivers.lane references lanes(id) and drivers.roster_id
+// references roster(id), so lanes and roster come before drivers.
+const TABLES = ['lanes', 'roster', 'dispatcher_assignments', 'drivers'];
 const PAGE = 1000;
 
 async function readAll(client, table) {
@@ -64,14 +65,28 @@ async function main() {
     }
   }
 
+  // Prod may not have the lanes table yet — its migration is pasted into the
+  // prod SQL editor by hand (see PREVIEW.md), which can land after this branch
+  // exists. Probe first: when it's missing, keep the preview's migration-seeded
+  // lanes instead of clearing them, which also keeps the drivers.lane FK
+  // satisfied — a pre-migration prod only holds the six seeded slugs.
+  let tables = TABLES;
+  {
+    const { error } = await source.from('lanes').select('id', { count: 'exact', head: true });
+    if (error) {
+      console.log(`[clone-prod] Prod has no "lanes" table yet (${error.message}) — keeping the migration-seeded lanes.`);
+      tables = TABLES.filter((t) => t !== 'lanes');
+    }
+  }
+
   // Clear any migration-seeded rows (e.g. default dispatcher slots) so the
-  // preview is an exact mirror of prod. Reverse order respects the FK.
-  for (const table of [...TABLES].reverse()) {
+  // preview is an exact mirror of prod. Reverse order respects the FKs.
+  for (const table of [...tables].reverse()) {
     const { error } = await target.from(table).delete().not('id', 'is', null);
     if (error) throw new Error(`clear ${table}: ${error.message}`);
   }
 
-  for (const table of TABLES) {
+  for (const table of tables) {
     const rows = await readAll(source, table);
     if (rows.length === 0) {
       console.log(`  · ${table}: 0 rows`);
