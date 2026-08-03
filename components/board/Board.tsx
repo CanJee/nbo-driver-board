@@ -380,6 +380,16 @@ export default function Board({ initialDrivers, initialDispatchers, initialLanes
     el.scrollTo({ left: lane.offsetLeft - el.offsetLeft, behavior: 'smooth' });
   };
 
+  // An empty result set is ambiguous: a genuinely clear board, or RLS
+  // filtering out every row because this tab's session died. Only apply the
+  // empty case while actually signed in — keeping the last-known board plus
+  // the failed-write toasts beats silently blanking a dispatch screen
+  // mid-shift. getSession reads local state, so the check is free.
+  const emptyIsReal = useCallback(async () => {
+    const { data } = await supabase.auth.getSession();
+    return data.session !== null;
+  }, []);
+
   const fetchDrivers = useCallback(async () => {
     if (isDraggingRef.current) return;
     const { data } = await supabase
@@ -390,14 +400,18 @@ export default function Board({ initialDrivers, initialDispatchers, initialLanes
       // briefly share a lane_order can swap places between refetches.
       .order('lane_order', { ascending: true })
       .order('checked_in_at', { ascending: true });
-    if (data) setDrivers(data as Driver[]);
-  }, []);
+    if (!data) return;
+    if (data.length === 0 && !(await emptyIsReal())) return;
+    setDrivers(data as Driver[]);
+  }, [emptyIsReal]);
 
   const fetchDispatchers = useCallback(async () => {
     if (isDraggingRef.current) return;
     const { data } = await supabase.from('dispatcher_assignments').select('*');
-    if (data) setDispatchers(data as DispatcherAssignment[]);
-  }, []);
+    if (!data) return;
+    if (data.length === 0 && !(await emptyIsReal())) return;
+    setDispatchers(data as DispatcherAssignment[]);
+  }, [emptyIsReal]);
 
   // ── REALTIME HEALTH ──
   // The subscription is this board's lifeline, and Supabase never replays the
@@ -443,8 +457,10 @@ export default function Board({ initialDrivers, initialDispatchers, initialLanes
       .from('lanes')
       .select(LANE_SELECT)
       .order('sort_order', { ascending: true });
-    if (data) setLanes(data as Lane[]);
-  }, []);
+    if (!data) return;
+    if (data.length === 0 && !(await emptyIsReal())) return;
+    setLanes(data as Lane[]);
+  }, [emptyIsReal]);
 
   useEffect(() => {
     const channel = supabase
