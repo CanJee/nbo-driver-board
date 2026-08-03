@@ -55,13 +55,24 @@ async function main() {
 
   console.log(`[clone-prod] Source ${prodUrl}  →  Target ${targetUrl}`);
 
-  // Idempotency: if the preview DB already holds data, don't clobber it on redeploys.
-  for (const table of ['roster', 'drivers']) {
-    const { count, error } = await target.from(table).select('*', { count: 'exact', head: true });
-    if (error) throw new Error(`count ${table}: ${error.message}`);
-    if ((count ?? 0) > 0) {
-      console.log(`[clone-prod] Preview "${table}" already has ${count} rows — skipping (idempotent).`);
-      return;
+  // Idempotency: if the preview DB already holds data, don't clobber it on
+  // redeploys. Exception: an empty lanes table means an earlier failed build
+  // cleared it mid-clone (migrations only seed lanes at branch creation), so
+  // whatever else is present is a half-finished clone — redo it in full.
+  const { count: laneCount, error: laneCountErr } = await target
+    .from('lanes')
+    .select('*', { count: 'exact', head: true });
+  const lanesWrecked = !laneCountErr && (laneCount ?? 0) === 0;
+  if (lanesWrecked) {
+    console.log('[clone-prod] Preview "lanes" is empty — treating the DB as half-cloned and re-cloning.');
+  } else {
+    for (const table of ['roster', 'drivers']) {
+      const { count, error } = await target.from(table).select('*', { count: 'exact', head: true });
+      if (error) throw new Error(`count ${table}: ${error.message}`);
+      if ((count ?? 0) > 0) {
+        console.log(`[clone-prod] Preview "${table}" already has ${count} rows — skipping (idempotent).`);
+        return;
+      }
     }
   }
 
