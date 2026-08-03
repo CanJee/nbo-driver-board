@@ -72,7 +72,10 @@ async function main() {
   // satisfied — a pre-migration prod only holds the six seeded slugs.
   let tables = TABLES;
   {
-    const { error } = await source.from('lanes').select('id', { count: 'exact', head: true });
+    // A real GET, not a HEAD probe: PostgREST reports a missing table in the
+    // response BODY, so a bodyless HEAD comes back with no error attached and
+    // the probe would pass right up until the actual read throws.
+    const { error } = await source.from('lanes').select('id').limit(1);
     if (error) {
       console.log(`[clone-prod] Prod has no "lanes" table yet (${error.message}) — keeping the migration-seeded lanes.`);
       tables = TABLES.filter((t) => t !== 'lanes');
