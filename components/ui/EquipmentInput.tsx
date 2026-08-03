@@ -2,9 +2,20 @@
 
 import { forwardRef } from 'react';
 
+/** Longest equipment number the fleet issues, e.g. C-105. */
+const MAX_DIGITS = 3;
+
+/**
+ * Numbers under 10 are still written two-up ("C-05"), which is how every car
+ * already on the board is stored. Padding to MAX_DIGITS instead would render
+ * those as "C-005" and, worse, stop the duplicate-car check in AssignModal from
+ * matching the "C-05" values already in the DB.
+ */
+const PAD_TO = 2;
+
 interface EquipmentInputProps {
   prefix: 'W-' | 'C-';
-  value: string;           // digits only, e.g. "12" or "05"
+  value: string;           // digits only, e.g. "12", "05" or "105"
   onChange: (digits: string) => void;
   disabled?: boolean;
 }
@@ -36,11 +47,11 @@ const EquipmentInput = forwardRef<HTMLInputElement, EquipmentInputProps>(
           type="text"
           inputMode="numeric"
           pattern="[0-9]*"
-          maxLength={2}
+          maxLength={MAX_DIGITS}
           value={value}
           disabled={disabled}
           onChange={(e) => {
-            const digits = e.target.value.replace(/\D/g, '').slice(0, 2);
+            const digits = e.target.value.replace(/\D/g, '').slice(0, MAX_DIGITS);
             onChange(digits);
           }}
           placeholder="00"
@@ -55,7 +66,7 @@ EquipmentInput.displayName = 'EquipmentInput';
 
 export default EquipmentInput;
 
-/** Parse a DB value like "W-12" or "C-05" → digits string "12" / "05" */
+/** Parse a DB value like "W-12" or "C-105" → digits string "12" / "105" */
 export function parseEquipment(val: string | null | undefined): string {
   if (!val) return '';
   // Strip any leading letter(s) and dash
@@ -63,8 +74,8 @@ export function parseEquipment(val: string | null | undefined): string {
   return stripped.replace(/\D/g, '');
 }
 
-/** Format digits back to DB format, e.g. "5" → "W-05", "" → "" */
+/** Format digits back to DB format, e.g. "5" → "W-05", "105" → "W-105", "" → "" */
 export function formatEquipment(digits: string, prefix: 'W-' | 'C-'): string {
   if (!digits) return '';
-  return `${prefix}${digits.padStart(2, '0')}`;
+  return `${prefix}${digits.padStart(PAD_TO, '0')}`;
 }
