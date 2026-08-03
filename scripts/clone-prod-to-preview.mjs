@@ -82,6 +82,26 @@ async function main() {
     }
   }
 
+  // When lanes aren't cloned they must still exist in the target, or inserting
+  // drivers trips drivers_lane_fkey. Normally the migration's seed covers this,
+  // but migrations only run at branch creation — a failed earlier build can
+  // leave the table cleared. Re-seed the defaults (mirrors the migration).
+  if (!tables.includes('lanes')) {
+    const { count, error } = await target.from('lanes').select('*', { count: 'exact', head: true });
+    if (!error && (count ?? 0) === 0) {
+      const { error: seedErr } = await target.from('lanes').insert([
+        { id: 'tennis_centre',  label: 'Tennis Centre',  sort_order: 0, active: true },
+        { id: 'uptown_hotel',   label: 'Uptown Hotel',   sort_order: 1, active: true },
+        { id: 'airport',        label: 'Airport',        sort_order: 2, active: true },
+        { id: 'other',          label: 'Other',          sort_order: 3, active: true },
+        { id: 'meals',          label: 'Meals',          sort_order: 4, active: true },
+        { id: 'downtown_hotel', label: 'Downtown Hotel', sort_order: 5, active: false },
+      ]);
+      if (seedErr) throw new Error(`seed lanes: ${seedErr.message}`);
+      console.log('[clone-prod] Re-seeded default lanes (target had none).');
+    }
+  }
+
   // Clear any migration-seeded rows (e.g. default dispatcher slots) so the
   // preview is an exact mirror of prod. Reverse order respects the FKs.
   for (const table of [...tables].reverse()) {
