@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { AlertTriangle } from 'lucide-react';
 import { formatClockTime } from '@/lib/date';
 
 /**
@@ -106,7 +107,7 @@ export function StaleBanner({ downSince }: { downSince: number | null }) {
         border: '1px solid var(--status-warn)',
       }}
     >
-      <span aria-hidden>⚠</span>
+      <AlertTriangle size={16} className="flex-shrink-0" aria-hidden />
       <span>
         Not live: updates from other screens stopped
         {downSince ? ` at ${formatClockTime(new Date(downSince).toISOString())}` : ''}.

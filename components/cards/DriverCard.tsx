@@ -1,10 +1,11 @@
 'use client';
 
 import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
-import { Check, ChevronUp, Copy, GripVertical, Pencil, Save, StickyNote, Trash2, X } from 'lucide-react';
+import { ArrowRight, Check, ChevronUp, Copy, GripVertical, Pencil, Save, StickyNote, Trash2, X } from 'lucide-react';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { AwayReason, Driver, Lane, LaneId, LocationStatus, SHIFT_COLORS, SHIFT_LABELS, AWAY_ICONS, AWAY_LABELS, AWAY_SHORT_LABELS } from '@/lib/types';
+import { AwayReason, Driver, Lane, LaneId, LocationStatus, SHIFT_COLORS, SHIFT_LABELS, AWAY_LABELS, AWAY_SHORT_LABELS } from '@/lib/types';
+import { AWAY_ICONS, type AwayIcon } from '@/lib/away-icons';
 import { activeLanes, laneLabel } from '@/lib/lanes';
 import { copyToClipboard } from '@/lib/clipboard';
 import { formatClockTime, formatDurationShort } from '@/lib/date';
@@ -398,8 +399,28 @@ export default function DriverCard({
     data: { driver },
   });
 
+  // Mouse-only drag start for the whole card (the grip keeps the full listener
+  // spread). A 28px grip strip was too small a target to grab with a mouse, and
+  // the 8px activation distance means click-to-expand still gets through — but
+  // touch drag has to stay on the grip, or a swipe across a card body would pick
+  // the card up instead of scrolling the lane.
+  //
+  // Keyed to onMouseDown because Board.tsx pairs a MouseSensor with a TouchSensor
+  // (Board.tsx:300-304) and each sensor contributes its own activator; if those
+  // are ever collapsed into a PointerSensor this must become onPointerDown.
+  // Narrowed by hand because dnd-kit types the listener map as
+  // Record<string, Function>, which strict mode won't assign to a real handler
+  // prop (the {...listeners} spread only compiles because spreads of an index
+  // signature aren't key-checked).
+  const dragMouseDown = listeners?.onMouseDown as React.MouseEventHandler | undefined;
+
   const isUnassigned = driver.status === 'unassigned';
   const isAway = driver.status === 'away';
+
+  // Capitalised on purpose: JSX only treats a binding as a component when its
+  // name starts with a capital, so `<AwayIcon />` needs this and `<awayIcon />`
+  // would render a literal <awayicon> element instead.
+  const AwayIcon = isAway && driver.away_reason ? AWAY_ICONS[driver.away_reason] : null;
 
   const style: React.CSSProperties = {
     transform: CSS.Transform.toString(transform),
@@ -480,14 +501,14 @@ export default function DriverCard({
       {!expanded && (
         // min-h (not fixed h) so the search snippet line can grow the card;
         // the drag handle uses self-stretch because h-full needs a fixed parent.
-        <div className="flex items-center min-h-[60px]">
+        <div className="flex items-center min-h-[60px]" onMouseDown={dragMouseDown}>
           <div
             {...attributes}
             {...listeners}
             suppressHydrationWarning
-            className="flex items-center justify-center w-7 self-stretch cursor-grab active:cursor-grabbing text-fg-ghost hover:text-fg-muted flex-shrink-0 touch-none"
+            className="flex items-center justify-center w-10 self-stretch cursor-grab active:cursor-grabbing text-fg-ghost hover:text-fg-muted flex-shrink-0 touch-none"
           >
-            <GripVertical size={15} />
+            <GripVertical size={18} />
           </div>
           <div
             className="flex-1 py-2 pr-3 cursor-pointer min-w-0"
@@ -515,23 +536,25 @@ export default function DriverCard({
                 {noteText && <NoteBadge note={noteText} interactive={!isDragOverlay} />}
                 {driver.location_status === 'en_route' && (
                   <span
-                    className="text-[9px] font-bold px-1.5 py-0.5 rounded-full leading-none"
+                    className="inline-flex items-center gap-0.5 text-[9px] font-bold px-1.5 py-0.5 rounded-full leading-none"
                     style={{ backgroundColor: 'var(--status-warn-strong-bg)', color: 'var(--status-warn-fg)' }}
                   >
-                    → EN ROUTE
+                    <ArrowRight size={10} className="flex-shrink-0" />
+                    EN ROUTE
                   </span>
                 )}
                 {driver.location_status === 'at_location' && (
                   <span
-                    className="text-[9px] font-bold px-1.5 py-0.5 rounded-full leading-none"
+                    className="inline-flex items-center gap-0.5 text-[9px] font-bold px-1.5 py-0.5 rounded-full leading-none"
                     style={{ backgroundColor: 'var(--status-success-strong-bg)', color: 'var(--status-success-bright)' }}
                   >
-                    ✓ AT LOCATION
+                    <Check size={10} className="flex-shrink-0" />
+                    AT LOCATION
                   </span>
                 )}
-                {isAway && driver.away_reason && (
-                  <span className="text-base leading-none" title={AWAY_LABELS[driver.away_reason]}>
-                    {AWAY_ICONS[driver.away_reason]}
+                {AwayIcon && driver.away_reason && (
+                  <span className="flex items-center flex-shrink-0" title={AWAY_LABELS[driver.away_reason]}>
+                    <AwayIcon size={16} aria-hidden />
                   </span>
                 )}
               </span>
@@ -556,24 +579,32 @@ export default function DriverCard({
       {expanded && (
         <div className="p-3" onClick={(e) => e.stopPropagation()}>
 
-          {/* Name + drag + collapse */}
-          <div className="flex items-center justify-between mb-2">
+          {/* Name + drag + collapse. The whole header row is the mouse drag
+              surface — grip, name and the dead space between them — while the
+              button-dense body below deliberately is not. */}
+          <div className="flex items-center justify-between mb-2" onMouseDown={dragMouseDown}>
             <div className="flex items-center gap-1.5 min-w-0">
               <div
                 {...attributes}
                 {...listeners}
                 suppressHydrationWarning
-                className="cursor-grab active:cursor-grabbing text-fg-ghost hover:text-fg-muted flex-shrink-0 touch-none"
+                className="p-2 -m-2 rounded cursor-grab active:cursor-grabbing text-fg-ghost hover:text-fg-muted flex-shrink-0 touch-none"
               >
-                <GripVertical size={14} />
+                <GripVertical size={18} />
               </div>
               <span className="text-base font-bold text-fg-strong truncate">{driver.name}</span>
             </div>
+            {/* Padded out to a 36px touch target, then pulled back with -m-2 so
+                the row's height and spacing are unchanged (the p-1 -m-1 trick
+                NoteBadge and CopyablePhone use, one size up). ml-2 restores the
+                8px gap the negative margin would otherwise eat. */}
             <button
+              type="button"
+              aria-label="Collapse card"
               onClick={() => setExpanded(false)}
-              className="text-fg-faint hover:text-fg-strong ml-2 flex-shrink-0 transition-colors"
+              className="p-2 -m-2 ml-2 rounded-md text-fg-muted hover:text-fg-strong hover:bg-black/5 dark:hover:bg-white/10 flex-shrink-0 transition-colors"
             >
-              <ChevronUp size={16} />
+              <ChevronUp size={20} />
             </button>
           </div>
 
@@ -644,25 +675,27 @@ export default function DriverCard({
             <div className="grid gap-1.5" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(84px, 1fr))' }}>
               <button
                 onClick={() => onSetLocationStatus(driver, driver.location_status === 'en_route' ? null : 'en_route')}
-                className="py-1.5 rounded text-[11px] font-bold transition-colors"
+                className="flex items-center justify-center gap-1 py-1.5 rounded text-[11px] font-bold transition-colors"
                 style={
                   driver.location_status === 'en_route'
                     ? { backgroundColor: 'var(--status-warn-strong-bg)', color: 'var(--status-warn-fg)', border: '1px solid #B45309' }
                     : { backgroundColor: 'var(--surface-card)', color: 'var(--fg-faint)', border: '1px solid var(--edge)' }
                 }
               >
-                → En Route
+                <ArrowRight size={12} />
+                En Route
               </button>
               <button
                 onClick={() => onSetLocationStatus(driver, driver.location_status === 'at_location' ? null : 'at_location')}
-                className="py-1.5 rounded text-[11px] font-bold transition-colors"
+                className="flex items-center justify-center gap-1 py-1.5 rounded text-[11px] font-bold transition-colors"
                 style={
                   driver.location_status === 'at_location'
                     ? { backgroundColor: 'var(--status-success-strong-bg)', color: 'var(--status-success-bright)', border: '1px solid var(--status-success)' }
                     : { backgroundColor: 'var(--surface-card)', color: 'var(--fg-faint)', border: '1px solid var(--edge)' }
                 }
               >
-                ✓ At Location
+                <Check size={12} />
+                At Location
               </button>
             </div>
           </div>
@@ -674,16 +707,17 @@ export default function DriverCard({
             </div>
             {isAway ? (
               <div className="flex items-center gap-2">
-                <span className="text-sm">
-                  {driver.away_reason && AWAY_ICONS[driver.away_reason]}{' '}
+                <span className="text-sm flex items-center gap-1.5 min-w-0">
+                  {AwayIcon && <AwayIcon size={14} className="flex-shrink-0" aria-hidden />}
                   <span className="text-fg-soft">{driver.away_reason && AWAY_LABELS[driver.away_reason]}</span>
                 </span>
                 <button
                   onClick={() => onSetAway(driver, null)}
-                  className="text-[11px] font-bold px-2.5 py-1 rounded text-white ml-auto"
+                  className="flex items-center gap-1 text-[11px] font-bold px-2.5 py-1 rounded text-white ml-auto"
                   style={{ backgroundColor: 'var(--status-success)' }}
                 >
-                  ✓ Returned
+                  <Check size={12} />
+                  Returned
                 </button>
               </div>
             ) : (
@@ -694,7 +728,7 @@ export default function DriverCard({
               // they don't, which stays readable where squeezing five columns
               // into a narrow lane would clip every caption to "Prac…".
               <div className="grid gap-1" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(42px, 1fr))' }}>
-                {(Object.entries(AWAY_ICONS) as [AwayReason, string][]).map(([reason, icon]) => (
+                {(Object.entries(AWAY_ICONS) as [AwayReason, AwayIcon][]).map(([reason, Icon]) => (
                   <button
                     key={reason}
                     onClick={() => onSetAway(driver, reason)}
@@ -702,7 +736,7 @@ export default function DriverCard({
                     className="flex flex-col items-center gap-0.5 min-w-0 px-0.5 py-1 rounded transition-colors hover:bg-black/5 dark:hover:bg-white/10 text-center"
                     style={{ border: '1px solid var(--edge-muted)' }}
                   >
-                    <span className="text-base leading-none">{icon}</span>
+                    <Icon size={16} aria-hidden />
                     <span className="text-[8px] text-fg-faint leading-none w-full truncate">
                       {AWAY_SHORT_LABELS[reason]}
                     </span>
@@ -723,10 +757,11 @@ export default function DriverCard({
                 <button
                   key={l.id}
                   onClick={() => onMoveToLane(driver, l.id)}
-                  className="px-2.5 py-1.5 rounded text-[11px] font-bold text-fg-soft transition-colors hover:bg-black/5 dark:hover:bg-white/10"
+                  className="flex items-center gap-1 px-2.5 py-1.5 rounded text-[11px] font-bold text-fg-soft transition-colors hover:bg-black/5 dark:hover:bg-white/10"
                   style={{ border: '1px solid var(--edge-muted)' }}
                 >
-                  {l.label} →
+                  <span className="truncate">{l.label}</span>
+                  <ArrowRight size={12} className="flex-shrink-0" />
                 </button>
               ))}
             </div>
