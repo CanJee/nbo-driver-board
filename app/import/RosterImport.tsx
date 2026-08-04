@@ -5,7 +5,8 @@ import Link from 'next/link';
 import { ArrowLeft, Upload, AlertTriangle, CheckCircle, FileText } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import ThemeToggle from '@/components/ui/ThemeToggle';
-import { LANE_LABELS, SHIFT_COLORS, SHIFT_LABELS } from '@/lib/types';
+import { Lane, SHIFT_COLORS, SHIFT_LABELS } from '@/lib/types';
+import { activeLanes, laneLabel } from '@/lib/lanes';
 import { getTournamentDate, formatRosterDate } from '@/lib/date';
 import { RosterParseResult, parseRosterCsv, parseRosterMatrix } from '@/lib/roster/parse';
 
@@ -33,7 +34,7 @@ function cellText(cell: { value: unknown; text?: string }): string {
 }
 
 // Read every worksheet into the cell matrix the parser expects.
-async function xlsxToSheets(buffer: ArrayBuffer): Promise<Sheet[]> {
+async function xlsxToSheets(buffer: ArrayBuffer, lanes: Lane[]): Promise<Sheet[]> {
   const ExcelJS = (await import('exceljs')).default;
   const wb = new ExcelJS.Workbook();
   await wb.xlsx.load(buffer);
@@ -45,11 +46,11 @@ async function xlsxToSheets(buffer: ArrayBuffer): Promise<Sheet[]> {
       for (let i = 0; i < cells.length; i++) if (cells[i] == null) cells[i] = '';
       matrix.push(cells);
     });
-    return { name: ws.name, result: parseRosterMatrix(matrix) };
+    return { name: ws.name, result: parseRosterMatrix(matrix, lanes) };
   });
 }
 
-export default function RosterImport() {
+export default function RosterImport({ lanes }: { lanes: Lane[] }) {
   const [fileName, setFileName] = useState('');
   const [sheets, setSheets] = useState<Sheet[]>([]);
   const [selectedSheet, setSelectedSheet] = useState(0);
@@ -61,6 +62,10 @@ export default function RosterImport() {
 
   const fileRef = useRef<HTMLInputElement>(null);
   const supabase = createClient();
+
+  // With no active lanes (fetch failed, or every lane hidden) parsed rows would
+  // have no lane to land in — parse and preview still work, importing doesn't.
+  const noLanes = activeLanes(lanes).length === 0;
 
   const result = sheets[selectedSheet]?.result ?? null;
 
@@ -104,9 +109,9 @@ export default function RosterImport() {
       const lower = file.name.toLowerCase();
       let loaded: Sheet[];
       if (lower.endsWith('.xlsx') || lower.endsWith('.xls')) {
-        loaded = await xlsxToSheets(await file.arrayBuffer());
+        loaded = await xlsxToSheets(await file.arrayBuffer(), lanes);
       } else {
-        loaded = [{ name: file.name, result: parseRosterCsv(await file.text()) }];
+        loaded = [{ name: file.name, result: parseRosterCsv(await file.text(), lanes) }];
       }
       setSheets(loaded);
       const d = loaded[0]?.result.detectedDate;
@@ -241,6 +246,13 @@ export default function RosterImport() {
           )}
         </div>
 
+        {noLanes && (
+          <div className="text-xs text-amber-700 dark:text-amber-300 rounded-lg px-4 py-3 mb-5 flex items-center gap-2"
+            style={{ backgroundColor: 'var(--status-warn-bg)', border: '1px solid #B45309' }}>
+            <AlertTriangle size={16} /> Lane list unavailable. Configure lanes from the board&apos;s Lanes button before importing.
+          </div>
+        )}
+
         {parseError && (
           <div className="text-sm text-(--status-error-fg) rounded-lg px-4 py-3 mb-5 flex items-center gap-2"
             style={{ backgroundColor: 'var(--status-error-bg)', border: '1px solid var(--brand)' }}>
@@ -317,7 +329,7 @@ export default function RosterImport() {
                             </span>
                           </td>
                           <td className="px-3 py-1.5 text-fg-muted">{r.shift_label || '—'}</td>
-                          <td className="px-3 py-1.5 text-fg-soft">{LANE_LABELS[r.lane]}</td>
+                          <td className="px-3 py-1.5 text-fg-soft">{laneLabel(lanes, r.lane)}</td>
                           <td className="px-3 py-1.5 text-fg-faint truncate max-w-[180px]">{r.source_location || '—'}</td>
                         </tr>
                       ))}
@@ -342,7 +354,7 @@ export default function RosterImport() {
                 <button
                   type="button"
                   onClick={handleImport}
-                  disabled={importing}
+                  disabled={importing || noLanes}
                   className="flex items-center gap-2 px-6 py-3 rounded-xl font-black text-sm tracking-widest uppercase text-white transition-opacity hover:opacity-90 disabled:opacity-50"
                   style={{ backgroundColor: 'var(--brand)' }}
                 >

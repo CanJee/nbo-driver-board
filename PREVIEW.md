@@ -15,9 +15,11 @@ live prod. (Production deploys are unchanged: they use the prod project.)
    [`vercel.json`](vercel.json)), on `VERCEL_ENV=preview`, aliases those to the
    `NEXT_PUBLIC_SUPABASE_*` the app reads, then runs the clone, then `next build`.
 4. [`scripts/clone-prod-to-preview.mjs`](scripts/clone-prod-to-preview.mjs) copies
-   `roster`, `dispatcher_assignments`, and `drivers` from prod into the preview DB.
-   It is **idempotent** (skips if the preview DB already has data) and **refuses** to
-   run if source and target resolve to the same project.
+   `lanes`, `roster`, `dispatcher_assignments`, and `drivers` from prod into the
+   preview DB. It is **idempotent** (skips if the preview DB already has data) and
+   **refuses** to run if source and target resolve to the same project. If prod
+   doesn't have the `lanes` table yet (its migration not run), the clone keeps the
+   preview's migration-seeded lanes and copies the rest.
 5. [`scripts/seed-preview-user.mjs`](scripts/seed-preview-user.mjs) recreates the shared
    dispatcher login in the preview DB. Supabase **auth users live in the `auth` schema**,
    which the Data-API clone can't touch, so a fresh preview DB has no users. This creates

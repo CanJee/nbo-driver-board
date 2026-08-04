@@ -2,12 +2,12 @@
 
 import { useEffect, useRef } from 'react';
 import { CheckCircle } from 'lucide-react';
-import { DriverShift, LaneId, LANE_LABELS, SHIFT_COLORS, SHIFT_LABELS } from '@/lib/types';
+import { DriverShift, SHIFT_COLORS, SHIFT_LABELS } from '@/lib/types';
 
 interface CheckInCompleteModalProps {
   name: string;
   shifts: DriverShift[];
-  lane: LaneId;
+  laneLabel: string;
   onDone: () => void;
 }
 
@@ -16,7 +16,7 @@ const AUTO_CLOSE_MS = 5000;
 export default function CheckInCompleteModal({
   name,
   shifts,
-  lane,
+  laneLabel,
   onDone,
 }: CheckInCompleteModalProps) {
   // Auto-close after 5 seconds. Read onDone via a ref so the timer is armed once
@@ -79,7 +79,7 @@ export default function CheckInCompleteModal({
               Starting Lane
             </span>
             <span className="text-sm font-semibold text-fg-strong">
-              {LANE_LABELS[lane]}
+              {laneLabel}
             </span>
           </div>
         </div>

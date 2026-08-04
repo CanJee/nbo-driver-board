@@ -6,9 +6,8 @@ import { createClient } from '@/lib/supabase/client';
 import {
   Driver,
   DriverShift,
+  Lane,
   LaneId,
-  LANE_LABELS,
-  MAIN_LANES,
   RosterEntry,
   SHIFT_COLORS,
   SHIFT_LABELS,
@@ -17,6 +16,7 @@ import {
   ShiftType,
   FLEET_DRIVER_ROLE,
 } from '@/lib/types';
+import { activeLanes, laneLabel } from '@/lib/lanes';
 import { getTournamentDate, formatRosterDate } from '@/lib/date';
 import { isFleetDriver, normalizeName, parseTimeToMinutes } from '@/lib/roster/map';
 import EquipmentInput, { formatEquipment } from '@/components/ui/EquipmentInput';
@@ -36,6 +36,9 @@ export interface CheckInData {
 interface CheckInModalProps {
   /** Everyone currently on the board — nobody here can be checked in again. */
   activeDrivers: Driver[];
+  /** Every lane row; active ones become the Starting Lane options, hidden ones
+   *  still resolve labels for "already checked in (…)" messages. */
+  lanes: Lane[];
   onConfirm: (data: CheckInData) => void;
   onCancel: () => void;
 }
@@ -62,8 +65,6 @@ interface ShiftDraft {
   source_location: string;
   scheduled: boolean;
 }
-
-const ALL_CHECKIN_LANES: LaneId[] = [...MAIN_LANES, 'meals'];
 
 const groupKey = (name: string, phone: string) =>
   `${normalizeName(name).toLowerCase()}|${phone.trim()}`;
@@ -102,12 +103,15 @@ function sortDrafts(drafts: ShiftDraft[]): ShiftDraft[] {
  *  the same driver be added a second time by hand — the exact case this blocks. */
 const boardKey = (name: string) => normalizeName(name).toLowerCase();
 
-export default function CheckInModal({ activeDrivers, onConfirm, onCancel }: CheckInModalProps) {
+export default function CheckInModal({ activeDrivers, lanes, onConfirm, onCancel }: CheckInModalProps) {
   const today = useMemo(() => getTournamentDate(), []);
+  const laneOptions = useMemo(() => activeLanes(lanes), [lanes]);
 
   const [query, setQuery] = useState('');
   const [roster, setRoster] = useState<RosterEntry[]>([]);
   const [rosterLoaded, setRosterLoaded] = useState(false);
+  /** Why the roster couldn't be READ — not the same as "nothing imported". */
+  const [rosterError, setRosterError] = useState<string | null>(null);
   const [showAllRoles, setShowAllRoles] = useState(false);
   const [showDropdown, setShowDropdown] = useState(false);
   const [selected, setSelected] = useState<GroupedDriver | null>(null);
@@ -115,7 +119,7 @@ export default function CheckInModal({ activeDrivers, onConfirm, onCancel }: Che
   const [drafts, setDrafts] = useState<ShiftDraft[]>([]);
   const [manualPeriod, setManualPeriod] = useState<ShiftType>('morning');
   const [manualTime, setManualTime] = useState('');
-  const [lane, setLane] = useState<LaneId>('tennis_centre');
+  const [lane, setLane] = useState<LaneId>(laneOptions[0]?.id ?? '');
   const [carDigits, setCarDigits] = useState('');
   const [error, setError] = useState<string | null>(null);
 
@@ -125,15 +129,28 @@ export default function CheckInModal({ activeDrivers, onConfirm, onCancel }: Che
 
   // Load today's roster, focus search without scrolling
   useEffect(() => {
-    supabase
-      .from('roster')
-      .select('*')
-      .eq('shift_date', today)
-      .order('name')
-      .then(({ data }) => {
-        if (data) setRoster(data as RosterEntry[]);
-        setRosterLoaded(true);
-      });
+    (async () => {
+      const { data, error } = await supabase
+        .from('roster')
+        .select('*')
+        .eq('shift_date', today)
+        .order('name');
+      const rows = (data ?? []) as RosterEntry[];
+      // An empty result is ambiguous: nothing imported, or RLS filtering every
+      // row because this tab's session died — which comes back with NO error.
+      // Only claim "no roster imported" while actually signed in (the same
+      // rule as the board's fetchers); anything else is a read failure and
+      // gets blamed on the connection, not on the roster.
+      if (error) {
+        setRosterError(error.message);
+      } else if (rows.length === 0) {
+        const { data: auth } = await supabase.auth.getSession();
+        if (!auth.session) setRosterError('you may be signed out');
+      } else {
+        setRoster(rows);
+      }
+      setRosterLoaded(true);
+    })();
     searchRef.current?.focus({ preventScroll: true });
   }, [today]);
 
@@ -179,7 +196,11 @@ export default function CheckInModal({ activeDrivers, onConfirm, onCancel }: Che
     setSelected(g);
     setQuery(g.name);
     setDrafts(newDrafts);
-    if (newDrafts[0]) setLane(newDrafts[0].lane);
+    // Only adopt the roster's lane if it is still an option — stale roster rows
+    // can point at a lane hidden since the import.
+    if (newDrafts[0] && laneOptions.some((l) => l.id === newDrafts[0].lane)) {
+      setLane(newDrafts[0].lane);
+    }
     setShowDropdown(false);
     setError(null);
   };
@@ -220,12 +241,14 @@ export default function CheckInModal({ activeDrivers, onConfirm, onCancel }: Che
     const already = onBoard.get(boardKey(name));
     if (already) {
       setError(
-        `${already.name} is already checked in (${LANE_LABELS[already.lane]}). ` +
+        `${already.name} is already checked in (${laneLabel(lanes, already.lane)}). ` +
         'Check them out first if you need to check them back in.'
       );
       return;
     }
     if (drafts.length === 0) { setError('Add at least one shift for this driver.'); return; }
+    // Only possible when the lanes fetch failed or every lane is hidden.
+    if (!lane) { setError('No lanes are configured. Add one from the Lanes button on the board first.'); return; }
 
     const sorted = sortDrafts(drafts);
     const primary = sorted[0];
@@ -254,7 +277,7 @@ export default function CheckInModal({ activeDrivers, onConfirm, onCancel }: Che
     });
   };
 
-  const noRosterToday = rosterLoaded && roster.length === 0;
+  const noRosterToday = rosterLoaded && !rosterError && roster.length === 0;
 
   return (
     <div className="modal-backdrop" onClick={onCancel}>
@@ -284,6 +307,18 @@ export default function CheckInModal({ activeDrivers, onConfirm, onCancel }: Che
             <div className="text-sm text-(--status-error-fg) rounded-lg px-4 py-2.5"
               style={{ backgroundColor: 'var(--status-error-bg)', border: '1px solid var(--brand)' }}>
               {error}
+            </div>
+          )}
+
+          {/* Roster read failure — a dead session or blocked request used to
+              render as "No roster imported", sending people hunting for an
+              import problem that didn't exist. Manual check-in still works,
+              and its save path has its own failure toast. */}
+          {rosterError && (
+            <div className="text-sm text-(--status-error-fg) rounded-lg px-4 py-2.5"
+              style={{ backgroundColor: 'var(--status-error-bg)', border: '1px solid var(--brand)' }}>
+              Couldn&apos;t load today&apos;s roster ({rosterError}). Sign out and back in, then
+              try again. You can still enter a driver manually below.
             </div>
           )}
 
@@ -373,7 +408,7 @@ export default function CheckInModal({ activeDrivers, onConfirm, onCancel }: Che
                         </div>
                         <div className="text-[10px] text-fg-muted mt-0.5">
                           {already
-                            ? `Checked in · ${LANE_LABELS[already.lane]}`
+                            ? `Checked in · ${laneLabel(lanes, already.lane)}`
                             : `${g.roles.join(', ') || '—'} · ${periods.map((d) => SHIFT_LABELS[d.shift_type]).join(' + ')}`}
                         </div>
                       </button>
@@ -386,7 +421,7 @@ export default function CheckInModal({ activeDrivers, onConfirm, onCancel }: Che
                 only thing that matters about this name until it changes. */}
             {duplicate ? (
               <p className="text-[10px] text-amber-700 dark:text-amber-400 mt-1.5 ml-1">
-                Already checked in · {LANE_LABELS[duplicate.lane]} — check them out first
+                Already checked in · {laneLabel(lanes, duplicate.lane)} — check them out first
                 to check them back in.
               </p>
             ) : selected ? (
@@ -485,19 +520,19 @@ export default function CheckInModal({ activeDrivers, onConfirm, onCancel }: Che
               3 · Starting Lane
             </label>
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-              {ALL_CHECKIN_LANES.map((l) => (
+              {laneOptions.map((l) => (
                 <button
-                  key={l}
+                  key={l.id}
                   type="button"
-                  onClick={() => setLane(l)}
+                  onClick={() => setLane(l.id)}
                   className="py-2 px-3 rounded-lg text-xs font-bold transition-all text-center"
                   style={{
-                    backgroundColor: lane === l ? 'var(--brand)' : 'var(--surface-panel)',
-                    border: `1px solid ${lane === l ? 'var(--brand)' : 'var(--edge)'}`,
-                    color: lane === l ? '#fff' : 'var(--fg-muted)',
+                    backgroundColor: lane === l.id ? 'var(--brand)' : 'var(--surface-panel)',
+                    border: `1px solid ${lane === l.id ? 'var(--brand)' : 'var(--edge)'}`,
+                    color: lane === l.id ? '#fff' : 'var(--fg-muted)',
                   }}
                 >
-                  {LANE_LABELS[l]}
+                  {l.label}
                 </button>
               ))}
             </div>

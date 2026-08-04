@@ -3,13 +3,15 @@
 import { useEffect, useRef } from 'react';
 import { useDroppable } from '@dnd-kit/core';
 import { SortableContext, rectSortingStrategy, verticalListSortingStrategy } from '@dnd-kit/sortable';
-import { AwayReason, Driver, LaneId, LocationStatus } from '@/lib/types';
+import { AwayReason, Driver, Lane, LaneId, LocationStatus } from '@/lib/types';
 import { SearchState } from '@/lib/search';
 import LaneHeader from './LaneHeader';
 import DriverCard from '@/components/cards/DriverCard';
 
 interface SwimLaneProps {
-  laneId: LaneId;
+  lane: Lane;
+  /** Every lane row (hidden included) — cards need them for labels + Move To. */
+  lanes: Lane[];
   drivers: Driver[];
   dispatcher?: string;
   className?: string;
@@ -26,7 +28,8 @@ interface SwimLaneProps {
 }
 
 export default function SwimLane({
-  laneId,
+  lane,
+  lanes,
   drivers,
   dispatcher,
   className = '',
@@ -40,7 +43,7 @@ export default function SwimLane({
   onSetLocationStatus,
   onMoveToLane,
 }: SwimLaneProps) {
-  const { setNodeRef, isOver } = useDroppable({ id: laneId });
+  const { setNodeRef, isOver } = useDroppable({ id: lane.id });
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const query = search?.query ?? '';
@@ -72,11 +75,11 @@ export default function SwimLane({
     <div
       // data-lane is load-bearing: the desktop width rule, the mobile
       // nearest-lane scroll maths and LaneResizer's measuring all select on it.
-      data-lane={laneId}
+      data-lane={lane.id}
       className={`flex flex-col rounded-md overflow-hidden border ${className}`}
       style={{ borderColor: 'var(--edge)', backgroundColor: 'var(--surface-panel)', ...style }}
     >
-      <LaneHeader laneId={laneId} count={drivers.length} matchCount={hitCount} dispatcher={dispatcher} />
+      <LaneHeader label={lane.label} count={drivers.length} matchCount={hitCount} dispatcher={dispatcher} />
 
       <div ref={setNodeRef} className="flex-1 flex flex-col min-h-0">
         {/* Once cards wrap into columns, sorting has to reason about real 2-D
@@ -104,6 +107,7 @@ export default function SwimLane({
               <DriverCard
                 key={driver.id}
                 driver={driver}
+                lanes={lanes}
                 searchHit={search ? (search.matches.get(driver.id) ?? null) : null}
                 searchDim={search !== null && !search.matches.has(driver.id)}
                 onCheckOut={onCheckOut}

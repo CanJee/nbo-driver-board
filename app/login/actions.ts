@@ -30,6 +30,11 @@ export async function login(formData: FormData) {
 
 export async function logout() {
   const supabase = await createClient();
-  await supabase.auth.signOut();
+  // Every screen shares ONE dispatcher account, and signOut() defaults to
+  // scope 'global', which revokes every device's session at once — so a
+  // volunteer signing out at shift end quietly killed the login on every
+  // other laptop and TV within the hour. 'local' ends only this device's
+  // session; rotating the account password is still the kick-everyone lever.
+  await supabase.auth.signOut({ scope: 'local' });
   redirect('/login');
 }

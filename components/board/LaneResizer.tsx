@@ -1,7 +1,7 @@
 'use client';
 
 import { useRef } from 'react';
-import { LANE_LABELS, LaneId } from '@/lib/types';
+import { LaneId } from '@/lib/types';
 import { LaneGrows } from '@/lib/board-prefs';
 
 /** How much one arrow-key press moves the divider, in CSS pixels. */
@@ -18,6 +18,9 @@ const laneMinPx = (el: HTMLElement) => parseFloat(getComputedStyle(el).minWidth)
 interface LaneResizerProps {
   leftLane: LaneId;
   rightLane: LaneId;
+  /** Display names for the aria-label; ids above drive the DOM selectors. */
+  leftLabel: string;
+  rightLabel: string;
   grows: LaneGrows;
   /** Board zoom in percent — converts the px min-width into on-screen pixels. */
   zoom: number;
@@ -47,6 +50,8 @@ interface Measurement {
 export default function LaneResizer({
   leftLane,
   rightLane,
+  leftLabel,
+  rightLabel,
   grows,
   zoom,
   boardRef,
@@ -156,7 +161,7 @@ export default function LaneResizer({
     <div
       role="separator"
       aria-orientation="vertical"
-      aria-label={`Resize ${LANE_LABELS[leftLane]} and ${LANE_LABELS[rightLane]} columns`}
+      aria-label={`Resize ${leftLabel} and ${rightLabel} columns`}
       aria-valuemin={0}
       aria-valuemax={100}
       aria-valuenow={sharePct}

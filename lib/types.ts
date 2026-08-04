@@ -6,15 +6,21 @@ export type LocationStatus = 'at_location' | 'en_route';
 
 export type AwayReason = 'gas' | 'carwash' | 'practice' | 'parking' | 'uptown_shuttle';
 
-export type LaneId =
-  | 'tennis_centre'
-  | 'uptown_hotel'
-  // Retained as a valid lane for legacy data and a future re-add, but NOT shown for
-  // 2026 (no downtown hotel this year) — intentionally left out of MAIN_LANES below.
-  | 'downtown_hotel'
-  | 'airport'
-  | 'other'
-  | 'meals';
+// Lane ids are rows in public.lanes (see supabase/migrations/*_lanes.sql), not a
+// hardcoded union — the alias survives so signatures still read as intent.
+export type LaneId = string;
+
+/** One board column, from public.lanes. Fetch ALL rows (inactive included):
+ *  labels for legacy data need the hidden ones, and LanesModal manages them.
+ *  Rendering order/filtering lives in activeLanes() in lib/lanes.ts. */
+export interface Lane {
+  id: LaneId;          // slug PK — also the dnd droppable id and width key
+  label: string;
+  sort_order: number;
+  active: boolean;
+}
+
+export const LANE_SELECT = 'id, label, sort_order, active';
 
 /** One scheduled shift for a driver on a given day (a single roster assignment). */
 export interface DriverShift {
@@ -51,6 +57,12 @@ export interface Driver {
   lane_entered_at: string | null;
 }
 
+/** Which dispatcher is staffing a lane, shown under the lane's header. */
+export interface DispatcherAssignment {
+  lane: string;
+  dispatcher_name: string;
+}
+
 /** A single assignment row from an imported daily roster. */
 export interface RosterEntry {
   id: string;
@@ -65,15 +77,6 @@ export interface RosterEntry {
   lane: LaneId;
   source_location: string;
 }
-
-export const LANE_LABELS: Record<LaneId, string> = {
-  tennis_centre: 'Tennis Centre',
-  uptown_hotel: 'Uptown Hotel',
-  downtown_hotel: 'Downtown Hotel',
-  airport: 'Airport',
-  other: 'Other',
-  meals: 'Meals',
-};
 
 export const SHIFT_COLORS: Record<ShiftType, string> = {
   morning: '#3B82F6',
@@ -126,14 +129,5 @@ export const AWAY_SHORT_LABELS: Record<AwayReason, string> = {
   parking: 'Parking',
   uptown_shuttle: 'Uptown',
 };
-
-// Board columns + check-in lane options (with `meals` appended in the UI).
-// `downtown_hotel` is intentionally omitted for 2026 — re-add it here to restore the column.
-export const MAIN_LANES: LaneId[] = [
-  'tennis_centre',
-  'uptown_hotel',
-  'airport',
-  'other',
-];
 
 export const SHIFT_TYPES: ShiftType[] = ['morning', 'afternoon', 'evening'];

@@ -1,6 +1,6 @@
 import { createClient } from '@/lib/supabase/server';
 import Board from '@/components/board/Board';
-import { Driver } from '@/lib/types';
+import { Driver, Lane, LANE_SELECT } from '@/lib/types';
 
 export default async function Home() {
   const supabase = await createClient();
@@ -18,10 +18,18 @@ export default async function Home() {
     .from('dispatcher_assignments')
     .select('*');
 
+  // Every lane row, hidden included — Board filters to active for the columns;
+  // the full list drives labels for legacy data and the Lanes manager.
+  const { data: lanes } = await supabase
+    .from('lanes')
+    .select(LANE_SELECT)
+    .order('sort_order', { ascending: true });
+
   return (
     <Board
       initialDrivers={(drivers as Driver[]) ?? []}
       initialDispatchers={dispatchers ?? []}
+      initialLanes={(lanes as Lane[]) ?? []}
     />
   );
 }

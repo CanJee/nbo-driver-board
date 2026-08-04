@@ -18,7 +18,17 @@ import {
 } from '@dnd-kit/core';
 import { arrayMove } from '@dnd-kit/sortable';
 import { createClient } from '@/lib/supabase/client';
-import { AwayReason, Driver, DriverShift, LaneId, LocationStatus, MAIN_LANES } from '@/lib/types';
+import {
+  AwayReason,
+  DispatcherAssignment,
+  Driver,
+  DriverShift,
+  Lane,
+  LaneId,
+  LANE_SELECT,
+  LocationStatus,
+} from '@/lib/types';
+import { activeLanes, laneLabel } from '@/lib/lanes';
 import { matchDriver, SearchMatchField, SearchState } from '@/lib/search';
 import {
   DEFAULT_ZOOM,
@@ -30,34 +40,33 @@ import {
   saveZoom,
 } from '@/lib/board-prefs';
 import { useLgUp } from '@/lib/useLgUp';
+import { useRefetchOnWake } from '@/lib/useRefetchOnWake';
+import { useWakeLock } from '@/lib/useWakeLock';
 import SwimLane from './SwimLane';
 import LaneTabs from './LaneTabs';
 import LaneResizer from './LaneResizer';
 import ZoomControl from './ZoomControl';
 import SearchBox from './SearchBox';
 import LiveClock from './LiveClock';
+import SyncStatus, { StaleBanner } from './SyncStatus';
 import DriverCard from '@/components/cards/DriverCard';
 import CheckOutModal from '@/components/modals/CheckOutModal';
 import AssignModal from '@/components/modals/AssignModal';
 import CheckInModal, { CheckInData } from '@/components/modals/CheckInModal';
 import CheckInCompleteModal from '@/components/modals/CheckInCompleteModal';
+import LanesModal from '@/components/modals/LanesModal';
 import Toast from '@/components/ui/Toast';
 import Portal from '@/components/ui/Portal';
 import NboLogo from '@/components/ui/NboLogo';
 import ThemeToggle from '@/components/ui/ThemeToggle';
 import { logout } from '@/app/login/actions';
 
-interface DispatcherAssignment {
-  lane: string;
-  dispatcher_name: string;
-}
-
 interface BoardProps {
   initialDrivers: Driver[];
   initialDispatchers: DispatcherAssignment[];
+  /** Every public.lanes row, hidden included, in sort_order. */
+  initialLanes: Lane[];
 }
-
-const ALL_LANES: LaneId[] = [...MAIN_LANES, 'meals'];
 
 // Rough size of one collapsed card row (min-h-[60px] + borders) and the gap
 // between cards — used only to estimate how many cards fit in a lane column.
@@ -199,9 +208,12 @@ function reorderForDrop(
   return fromLane === targetLane ? next : renumberLanes(next, [fromLane]);
 }
 
-export default function Board({ initialDrivers, initialDispatchers }: BoardProps) {
+export default function Board({ initialDrivers, initialDispatchers, initialLanes }: BoardProps) {
   const [drivers, setDrivers] = useState<Driver[]>(initialDrivers);
   const [dispatchers, setDispatchers] = useState<DispatcherAssignment[]>(initialDispatchers);
+  const [lanes, setLanes] = useState<Lane[]>(initialLanes);
+  const [showLanes, setShowLanes] = useState(false);
+  const [placingOrphans, setPlacingOrphans] = useState(false);
   const [activeDriver, setActiveDriver] = useState<Driver | null>(null);
   const [checkOutDriver, setCheckOutDriver] = useState<Driver | null>(null);
   const [assignDriver, setAssignDriver] = useState<Driver | null>(null);
@@ -255,6 +267,19 @@ export default function Board({ initialDrivers, initialDispatchers }: BoardProps
   // are misclassified as within-lane no-ops and never persisted.
   const dragSourceLaneRef = useRef<LaneId | null>(null);
 
+  // The columns the board shows, in saved order — pinned for the duration of a
+  // drag (ridecrew's staging-board pattern): a lane hidden or added on another
+  // device mid-drag would shift every drop rect dnd-kit measured at drag start.
+  // The realtime guard already stops *this* device refetching lanes mid-drag;
+  // the pin covers state that changed just before the guard engaged.
+  const liveLanes = useMemo(() => activeLanes(lanes), [lanes]);
+  const pinnedLanesRef = useRef<Lane[] | null>(null);
+  const renderedLanes = (activeDriver && pinnedLanesRef.current) || liveLanes;
+  const renderedLaneIds = useMemo(
+    () => new Set(renderedLanes.map((l) => l.id)),
+    [renderedLanes]
+  );
+
   const supabase = createClient();
 
   // Mouse drags after 8px of movement (prevents conflict with click-to-expand);
@@ -282,8 +307,18 @@ export default function Board({ initialDrivers, initialDispatchers }: BoardProps
   // render agree on the defaults (same mount guard ThemeToggle uses).
   useEffect(() => {
     setZoom(loadZoom());
-    setLaneWidths(loadLaneWidths(ALL_LANES));
   }, []);
+
+  // Saved widths are only valid for the exact lane set on screen, so re-check
+  // whenever it changes — loadLaneWidths falls back to auto unless every
+  // rendered lane has a sane saved weight, which resets stale widths after a
+  // lane is added or hidden mid-session too. Keyed on the joined id list (ids
+  // are [a-z0-9_] slugs, so ',' can never appear inside one); the live set,
+  // not the drag-pinned one, since prefs should follow reality.
+  const liveLaneKey = liveLanes.map((l) => l.id).join(',');
+  useEffect(() => {
+    setLaneWidths(loadLaneWidths(liveLaneKey ? liveLaneKey.split(',') : []));
+  }, [liveLaneKey]);
 
   // Lanes are equal-height flex siblings, so one lane's list height tells us how
   // many cards fit in a single column — which is what decides how many columns a
@@ -297,17 +332,18 @@ export default function Board({ initialDrivers, initialDispatchers }: BoardProps
     const board = boardRef.current;
     const list = board?.querySelector<HTMLElement>('[data-lane] .lane-scroll');
     if (!board || !list) return;
+    const laneCount = renderedLanes.length;
     const measure = () => {
       const contentH = list.clientHeight - LANE_LIST_PADDING_PX;
       setRowsPerCol(Math.max(1, Math.floor((contentH + CARD_GAP_PX) / (CARD_ROW_PX + CARD_GAP_PX))));
-      setColBudget(columnBudget(board.clientWidth, ALL_LANES.length));
+      setColBudget(columnBudget(board.clientWidth, laneCount));
     };
     measure();
     const ro = new ResizeObserver(measure);
     ro.observe(list);
     ro.observe(board);
     return () => ro.disconnect();
-  }, [zoom]);
+  }, [zoom, renderedLanes.length]);
 
   // Lane elements only — the divider siblings between them are not lanes, so
   // indexing boardRef.children directly would misalign the LaneTabs mapping.
@@ -344,6 +380,16 @@ export default function Board({ initialDrivers, initialDispatchers }: BoardProps
     el.scrollTo({ left: lane.offsetLeft - el.offsetLeft, behavior: 'smooth' });
   };
 
+  // An empty result set is ambiguous: a genuinely clear board, or RLS
+  // filtering out every row because this tab's session died. Only apply the
+  // empty case while actually signed in — keeping the last-known board plus
+  // the failed-write toasts beats silently blanking a dispatch screen
+  // mid-shift. getSession reads local state, so the check is free.
+  const emptyIsReal = useCallback(async () => {
+    const { data } = await supabase.auth.getSession();
+    return data.session !== null;
+  }, []);
+
   const fetchDrivers = useCallback(async () => {
     if (isDraggingRef.current) return;
     const { data } = await supabase
@@ -354,27 +400,134 @@ export default function Board({ initialDrivers, initialDispatchers }: BoardProps
       // briefly share a lane_order can swap places between refetches.
       .order('lane_order', { ascending: true })
       .order('checked_in_at', { ascending: true });
-    if (data) setDrivers(data as Driver[]);
-  }, []);
+    if (!data) return;
+    if (data.length === 0 && !(await emptyIsReal())) return;
+    setDrivers(data as Driver[]);
+  }, [emptyIsReal]);
+
+  const fetchDispatchers = useCallback(async () => {
+    if (isDraggingRef.current) return;
+    const { data } = await supabase.from('dispatcher_assignments').select('*');
+    if (!data) return;
+    if (data.length === 0 && !(await emptyIsReal())) return;
+    setDispatchers(data as DispatcherAssignment[]);
+  }, [emptyIsReal]);
+
+  // ── REALTIME HEALTH ──
+  // The subscription is this board's lifeline, and Supabase never replays the
+  // events a dead socket missed — a screen with a quietly-dropped connection
+  // keeps showing old pixels that read as live (the on-site "nobody is
+  // refreshing" reports). So every channel reports its status here: any
+  // channel leaving SUBSCRIBED marks the board down (SyncStatus surfaces it
+  // after a grace period), and every (re)SUBSCRIBE refetches to close the gap
+  // the outage opened.
+  const channelHealthRef = useRef<Record<string, boolean>>({});
+  const [realtimeDownSince, setRealtimeDownSince] = useState<number | null>(null);
+
+  const trackChannelStatus = useCallback(
+    (name: string, status: string, refetch: () => void) => {
+      const healthy = status === 'SUBSCRIBED';
+      channelHealthRef.current[name] = healthy;
+      const allHealthy = Object.values(channelHealthRef.current).every(Boolean);
+      setRealtimeDownSince((prev) => (allHealthy ? null : prev ?? Date.now()));
+      if (healthy) refetch(); // reconcile whatever a dead socket missed
+    },
+    []
+  );
 
   useEffect(() => {
     const channel = supabase
       .channel('drivers-realtime')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'drivers' }, fetchDrivers)
-      .subscribe();
+      .subscribe((status) => trackChannelStatus('drivers', status, fetchDrivers));
     return () => { supabase.removeChannel(channel); };
-  }, [fetchDrivers]);
+  }, [fetchDrivers, trackChannelStatus]);
 
   useEffect(() => {
     const channel = supabase
       .channel('dispatchers-realtime')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'dispatcher_assignments' }, async () => {
-        const { data } = await supabase.from('dispatcher_assignments').select('*');
-        if (data) setDispatchers(data as DispatcherAssignment[]);
-      })
-      .subscribe();
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'dispatcher_assignments' }, fetchDispatchers)
+      .subscribe((status) => trackChannelStatus('dispatchers', status, fetchDispatchers));
     return () => { supabase.removeChannel(channel); };
-  }, []);
+  }, [fetchDispatchers, trackChannelStatus]);
+
+  const fetchLanes = useCallback(async () => {
+    if (isDraggingRef.current) return;
+    const { data } = await supabase
+      .from('lanes')
+      .select(LANE_SELECT)
+      .order('sort_order', { ascending: true });
+    if (!data) return;
+    if (data.length === 0 && !(await emptyIsReal())) return;
+    setLanes(data as Lane[]);
+  }, [emptyIsReal]);
+
+  useEffect(() => {
+    const channel = supabase
+      .channel('lanes-realtime')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'lanes' }, fetchLanes)
+      .subscribe((status) => trackChannelStatus('lanes', status, fetchLanes));
+    return () => { supabase.removeChannel(channel); };
+  }, [fetchLanes, trackChannelStatus]);
+
+  // One "get fresh data now" entry point — a wake or refocus can't know what
+  // changed while the device was asleep, so everything refetches.
+  const fetchAll = useCallback(() => {
+    void Promise.all([fetchDrivers(), fetchDispatchers(), fetchLanes()]);
+  }, [fetchDrivers, fetchDispatchers, fetchLanes]);
+
+  // A device waking from sleep must never sit on a pre-sleep board: its socket
+  // died during the nap and the missed events are gone for good.
+  useRefetchOnWake(fetchAll);
+
+  // Prevention half of the same problem — the dispatch board runs on venue TVs
+  // and front-desk laptops that should not sleep mid-shift in the first place.
+  useWakeLock(true);
+
+  // Drivers whose lane row is hidden or missing — legacy downtown_hotel rows,
+  // or a lane hidden from another device while cards were still in it. They
+  // render in no column, so surface them in the header with a one-tap rescue
+  // into the first lane (ridecrew's "without a zone" chip). Strictly better
+  // than the old hardcoded board, which showed such drivers nowhere at all.
+  const orphans = useMemo(
+    () => drivers.filter((d) => !liveLanes.some((l) => l.id === d.lane)),
+    [drivers, liveLanes]
+  );
+
+  const placeOrphans = async () => {
+    const target = liveLanes[0];
+    if (!target || orphans.length === 0 || placingOrphans) return;
+    setPlacingOrphans(true);
+    const base = nextLaneOrder(drivers, target.id);
+    const moves = orphans.map((d, i) => ({ id: d.id, lane_order: base + i }));
+    setDrivers((prev) =>
+      prev.map((d) => {
+        const m = moves.find((x) => x.id === d.id);
+        return m ? { ...d, lane: target.id, lane_order: m.lane_order } : d;
+      })
+    );
+    let failed: string | null = null;
+    try {
+      const results = await Promise.all(
+        moves.map((m) =>
+          supabase
+            .from('drivers')
+            .update({ lane: target.id, lane_order: m.lane_order })
+            .eq('id', m.id)
+            .select('id')
+        )
+      );
+      failed =
+        results.find((r) => r.error)?.error?.message ??
+        (results.some((r) => !r.error && (r.data?.length ?? 0) === 0)
+          ? 'no rows updated; you may be signed out'
+          : null);
+    } finally {
+      setPlacingOrphans(false);
+    }
+    if (failed) setToast(`Some moves didn't save (${failed}).`);
+    await fetchDrivers(); // pick up the trigger-stamped lane_entered_at
+  };
 
   // A lane's order exactly as it is rendered — and the single list the drag
   // handlers reorder against. Ordering is purely lane_order: an earlier version
@@ -409,12 +562,16 @@ export default function Board({ initialDrivers, initialDispatchers }: BoardProps
   const frozenLayoutRef = useRef<LaneLayout | null>(null);
   const laneLayout = useMemo<LaneLayout>(() => {
     const frozen = activeDriver ? frozenLayoutRef.current : null;
+    const laneIds = renderedLanes.map((l) => l.id);
     const counts = {} as Record<LaneId, number>;
     const cols = {} as Record<LaneId, number>;
-    for (const lane of ALL_LANES) {
+    for (const lane of laneIds) {
       counts[lane] = drivers.filter((d) => d.lane === lane).length;
       cols[lane] =
-        frozen?.[lane].cols ??
+        // Optional-chained per lane: with the drag pin the frozen and rendered
+        // key sets always agree, but a lane shown in the same tick as a drag
+        // start costs nothing to defend against.
+        frozen?.[lane]?.cols ??
         Math.min(MAX_LANE_COLS, Math.max(1, Math.ceil(counts[lane] / rowsPerCol)));
     }
 
@@ -425,9 +582,9 @@ export default function Board({ initialDrivers, initialDispatchers }: BoardProps
     // the shortest per column, so it is the one that loses the least by giving
     // one up (ties go to the emptier lane). Every lane keeps its last column.
     if (!frozen) {
-      let total = ALL_LANES.reduce((n, lane) => n + cols[lane], 0);
+      let total = laneIds.reduce((n, lane) => n + cols[lane], 0);
       while (total > colBudget) {
-        const victim = ALL_LANES.reduce((worst, lane) =>
+        const victim = laneIds.reduce((worst, lane) =>
           cols[lane] > cols[worst] ||
           (cols[lane] === cols[worst] && counts[lane] < counts[worst])
             ? lane
@@ -440,20 +597,20 @@ export default function Board({ initialDrivers, initialDispatchers }: BoardProps
     }
 
     const next = {} as LaneLayout;
-    for (const lane of ALL_LANES) {
-      const rows = Math.max(frozen?.[lane].rows ?? 1, Math.ceil(counts[lane] / cols[lane]), 1);
+    for (const lane of laneIds) {
+      const rows = Math.max(frozen?.[lane]?.rows ?? 1, Math.ceil(counts[lane] / cols[lane]), 1);
       next[lane] = { cols: cols[lane], rows };
     }
     if (!frozen) frozenLayoutRef.current = next;
     return next;
-  }, [drivers, rowsPerCol, colBudget, activeDriver]);
+  }, [drivers, rowsPerCol, colBudget, activeDriver, renderedLanes]);
 
   // A lane is exactly as wide as the number of columns it is showing.
   const autoGrows = useMemo<LaneGrows>(() => {
     const g: LaneGrows = {};
-    for (const lane of ALL_LANES) g[lane] = laneLayout[lane].cols;
+    for (const lane of renderedLanes) g[lane.id] = laneLayout[lane.id]?.cols ?? 1;
     return g;
-  }, [laneLayout]);
+  }, [laneLayout, renderedLanes]);
 
   const effectiveGrows = laneWidths.mode === 'manual' ? laneWidths.grows : autoGrows;
 
@@ -478,9 +635,23 @@ export default function Board({ initialDrivers, initialDispatchers }: BoardProps
     isDraggingRef.current = true;
     const driver = drivers.find((d) => d.id === event.active.id);
     if (driver) {
+      // Pin the lane list before any optimistic state change (see renderedLanes).
+      pinnedLanesRef.current = liveLanes;
       setActiveDriver(driver);
       dragSourceLaneRef.current = driver.lane; // capture original lane before any optimistic updates
     }
+  };
+
+  // ── DRAG CANCEL (Escape, or dnd-kit aborting a drag) ──
+  // dnd-kit fires onDragCancel INSTEAD of onDragEnd for these. The board never
+  // registered it, so a cancelled drag left isDraggingRef stuck true and
+  // realtime refetch blocked for the rest of the session — a latent bug fixed
+  // alongside the lane pinning, which needs the same cleanup.
+  const handleDragCancel = () => {
+    setActiveDriver(null);
+    pinnedLanesRef.current = null;
+    dragSourceLaneRef.current = null;
+    isDraggingRef.current = false;
   };
 
   // ── DRAG OVER (live preview while hovering) ──
@@ -495,7 +666,7 @@ export default function Board({ initialDrivers, initialDispatchers }: BoardProps
     const draggedDriver = drivers.find((d) => d.id === activeId);
     if (!draggedDriver) return;
 
-    const isOverLane = (ALL_LANES as string[]).includes(overId);
+    const isOverLane = renderedLaneIds.has(overId);
     const overDriver = !isOverLane ? drivers.find((d) => d.id === overId) : null;
     const targetLane = (isOverLane ? overId : overDriver?.lane) as LaneId | undefined;
     if (!targetLane) return;
@@ -519,6 +690,7 @@ export default function Board({ initialDrivers, initialDispatchers }: BoardProps
   // ── DRAG END ──
   const handleDragEnd = async (event: DragEndEvent) => {
     setActiveDriver(null);
+    pinnedLanesRef.current = null;
     const { active, over } = event;
 
     // Always clear the source-lane ref, even if we return early
@@ -538,7 +710,7 @@ export default function Board({ initialDrivers, initialDispatchers }: BoardProps
     const draggedDriver = drivers.find((d) => d.id === activeId);
     if (!draggedDriver) return releaseGuard();
 
-    const isOverLane = (ALL_LANES as string[]).includes(overId);
+    const isOverLane = renderedLaneIds.has(overId);
     const overDriver = !isOverLane ? drivers.find((d) => d.id === overId) : null;
     const targetLane = (isOverLane ? overId : overDriver?.lane) as LaneId;
     if (!targetLane) return releaseGuard();
@@ -577,22 +749,40 @@ export default function Board({ initialDrivers, initialDispatchers }: BoardProps
       affectedLanes.includes(d.lane as LaneId)
     );
 
+    // A failed write here used to fail in silence: the optimistic order stayed
+    // on screen and only "moved back" on the next refresh, which on site read
+    // as the board undoing people's work. Say so and resync immediately.
+    // `.select('id')` is how a dead session shows up: RLS makes an anon UPDATE
+    // match zero rows with NO error, so returned-row count is the only signal.
+    let failed: string | null = null;
     try {
-      await Promise.all(
+      const results = await Promise.all(
         toSave.map((d) =>
           supabase
             .from('drivers')
             .update({ lane: d.lane, lane_order: d.lane_order })
             .eq('id', d.id)
+            .select('id')
         )
       );
+      failed =
+        results.find((r) => r.error)?.error?.message ??
+        (results.some((r) => !r.error && (r.data?.length ?? 0) === 0)
+          ? 'no rows updated; you may be signed out'
+          : null);
+    } catch (e) {
+      failed = e instanceof Error ? e.message : 'network error';
     } finally {
       // Hold the guard until every row is written. Each update fires its own
       // realtime event, and a refetch part-way through the burst would read a
       // half-applied ordering and visibly snap cards back to where they were.
-      // Our optimistic state already matches what was written, so there is
-      // nothing to reconcile here — the next change from anyone refetches.
+      // On success the optimistic state already matches what was written, so
+      // there is nothing to reconcile — the next change from anyone refetches.
       releaseGuard();
+    }
+    if (failed) {
+      setToast(`Move didn't save (${failed}). Refreshing the board.`);
+      await fetchDrivers();
     }
   };
 
@@ -636,10 +826,17 @@ export default function Board({ initialDrivers, initialDispatchers }: BoardProps
     setDrivers((prev) =>
       prev.map((d) => (d.id === driver.id ? { ...d, location_status: status } : d))
     );
-    await supabase
+    const { data, error } = await supabase
       .from('drivers')
       .update({ location_status: status })
-      .eq('id', driver.id);
+      .eq('id', driver.id)
+      .select('id'); // zero rows back = RLS filtered the write (dead session)
+    if (error || (data?.length ?? 0) === 0) {
+      setToast(
+        `Status didn't save (${error?.message ?? 'you may be signed out'}). Refreshing the board.`
+      );
+      await fetchDrivers();
+    }
   };
 
   // ── MOVE TO LANE (tap alternative to drag — used by the mobile card UI) ──
@@ -654,10 +851,17 @@ export default function Board({ initialDrivers, initialDispatchers }: BoardProps
         driver.id
       )
     );
-    await supabase
+    const { data, error } = await supabase
       .from('drivers')
       .update({ lane, lane_order: nextOrder })
-      .eq('id', driver.id);
+      .eq('id', driver.id)
+      .select('id'); // zero rows back = RLS filtered the write (dead session)
+    if (error || (data?.length ?? 0) === 0) {
+      setToast(
+        `Move didn't save (${error?.message ?? 'you may be signed out'}). Refreshing the board.`
+      );
+      await fetchDrivers();
+    }
   };
 
   // ── ASSIGN ──
@@ -722,6 +926,7 @@ export default function Board({ initialDrivers, initialDispatchers }: BoardProps
       onDragStart={handleDragStart}
       onDragOver={handleDragOver}
       onDragEnd={handleDragEnd}
+      onDragCancel={handleDragCancel}
       // dnd-kit adjusts its cached drop rects by raw scroll deltas, which are in
       // unzoomed pixels — so edge auto-scroll during a drag would skew hit
       // testing at any zoom but 100%. At lg+ every lane is on screen anyway.
@@ -775,8 +980,38 @@ export default function Board({ initialDrivers, initialDispatchers }: BoardProps
             >
               <Search size={16} />
             </button>
+            {/* Rescue chip for drivers stranded in a hidden/deleted lane — rare,
+                so it only ever renders while there is something to rescue. */}
+            {orphans.length > 0 && liveLanes[0] && (
+              <button
+                type="button"
+                onClick={placeOrphans}
+                disabled={placingOrphans}
+                title={orphans.map((d) => d.name).join(', ')}
+                className="px-2 lg:px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition-opacity hover:opacity-80 disabled:opacity-50"
+                style={{
+                  backgroundColor: 'var(--status-warn-bg)',
+                  color: 'var(--status-warn-fg)',
+                  border: '1px solid #B45309',
+                }}
+              >
+                {/* The destination suffix costs ~110px and pushes the clock out
+                    of the header below 2xl — the tap does the same thing either
+                    way, so only spell it out where there is room. */}
+                ⚠ {orphans.length} in hidden lanes
+                <span className="hidden 2xl:inline"> → {liveLanes[0].label}</span>
+              </button>
+            )}
             <ZoomControl value={zoom} onChange={handleZoomChange} />
             <ThemeToggle />
+            <button
+              type="button"
+              onClick={() => setShowLanes(true)}
+              className="px-2 lg:px-3 py-1.5 rounded-lg text-xs font-bold tracking-widest uppercase text-fg-soft hover:text-fg-strong transition-colors whitespace-nowrap"
+              style={{ border: '1px solid var(--edge)' }}
+            >
+              Lanes
+            </button>
             <Link
               href="/import"
               className="px-2 lg:px-3 py-1.5 rounded-lg text-xs font-bold tracking-widest uppercase text-fg-soft hover:text-fg-strong transition-colors whitespace-nowrap"
@@ -791,17 +1026,22 @@ export default function Board({ initialDrivers, initialDispatchers }: BoardProps
             >
               + Check In
             </button>
+            <SyncStatus downSince={realtimeDownSince} />
             <LiveClock className="text-lg lg:text-2xl" />
           </div>
         </div>
 
+        {/* The loud half of the staleness story — the header pill is easy to
+            miss from across a room, this isn't. Renders nothing while live. */}
+        <StaleBanner downSince={realtimeDownSince} />
+
         {/* Lane switcher — phones/tablets only */}
         <LaneTabs
-          lanes={ALL_LANES}
-          counts={ALL_LANES.map((l) => driversInLane(l).length)}
+          lanes={renderedLanes}
+          counts={renderedLanes.map((l) => driversInLane(l.id).length)}
           matchCounts={
             search
-              ? ALL_LANES.map((l) => driversInLane(l).filter((d) => searchMatches.has(d.id)).length)
+              ? renderedLanes.map((l) => driversInLane(l.id).filter((d) => searchMatches.has(d.id)).length)
               : undefined
           }
           activeIdx={activeLaneIdx}
@@ -836,12 +1076,24 @@ export default function Board({ initialDrivers, initialDispatchers }: BoardProps
             activeDriver ? 'board-dragging' : ''
           } ${isResizing ? 'board-resizing' : ''}`}
         >
-          {ALL_LANES.map((laneId, i) => (
-            <Fragment key={laneId}>
+          {renderedLanes.length === 0 && (
+            // Only reachable when the lanes fetch failed (e.g. local dev against
+            // a database without the lanes migration) — LanesModal refuses to
+            // hide the last active lane.
+            <div className="flex-1 flex items-center justify-center">
+              <span className="text-sm text-fg-faint uppercase tracking-widest">
+                No lanes configured. Open Lanes above to add one.
+              </span>
+            </div>
+          )}
+          {renderedLanes.map((lane, i) => (
+            <Fragment key={lane.id}>
               {i > 0 && (
                 <LaneResizer
-                  leftLane={ALL_LANES[i - 1]}
-                  rightLane={laneId}
+                  leftLane={renderedLanes[i - 1].id}
+                  rightLane={lane.id}
+                  leftLabel={renderedLanes[i - 1].label}
+                  rightLabel={lane.label}
                   grows={effectiveGrows}
                   zoom={zoom}
                   boardRef={boardRef}
@@ -855,9 +1107,12 @@ export default function Board({ initialDrivers, initialDispatchers }: BoardProps
                 />
               )}
               <SwimLane
-                laneId={laneId}
-                drivers={driversInLane(laneId)}
-                dispatcher={laneId === 'uptown_hotel' ? getDispatcher(laneId) : undefined}
+                lane={lane}
+                lanes={lanes}
+                drivers={driversInLane(lane.id)}
+                // Only lanes with a dispatcher_assignments row ever show a name
+                // (today: uptown_hotel — that table has its own lane CHECK).
+                dispatcher={getDispatcher(lane.id) || undefined}
                 onCheckOut={setCheckOutDriver}
                 onAssign={setAssignDriver}
                 onUpdateNotes={handleUpdateNotes}
@@ -871,9 +1126,9 @@ export default function Board({ initialDrivers, initialDispatchers }: BoardProps
                 // Manual drags change the weight only — never the grid itself.
                 style={
                   {
-                    '--lane-grow': effectiveGrows[laneId] ?? 1,
-                    '--lane-cols': laneLayout[laneId].cols,
-                    '--lane-rows': laneLayout[laneId].rows,
+                    '--lane-grow': effectiveGrows[lane.id] ?? 1,
+                    '--lane-cols': laneLayout[lane.id]?.cols ?? 1,
+                    '--lane-rows': laneLayout[lane.id]?.rows ?? 1,
                   } as React.CSSProperties
                 }
                 className="snap-start flex-none w-[86vw] sm:w-[46vw] md:w-[31.5vw] lg:w-auto"
@@ -913,6 +1168,7 @@ export default function Board({ initialDrivers, initialDispatchers }: BoardProps
           <div className="overlay-zoom" style={{ '--board-zoom': zoom / 100 } as React.CSSProperties}>
             <DriverCard
               driver={activeDriver}
+              lanes={lanes}
               onCheckOut={() => {}}
               onAssign={() => {}}
               onUpdateNotes={() => {}}
@@ -930,6 +1186,7 @@ export default function Board({ initialDrivers, initialDispatchers }: BoardProps
         {showCheckIn && (
           <CheckInModal
             activeDrivers={drivers}
+            lanes={lanes}
             onConfirm={handleCheckIn}
             onCancel={() => setShowCheckIn(false)}
           />
@@ -938,8 +1195,16 @@ export default function Board({ initialDrivers, initialDispatchers }: BoardProps
           <CheckInCompleteModal
             name={checkInComplete.name}
             shifts={checkInComplete.shifts}
-            lane={checkInComplete.lane}
+            laneLabel={laneLabel(lanes, checkInComplete.lane)}
             onDone={() => setCheckInComplete(null)}
+          />
+        )}
+        {showLanes && (
+          <LanesModal
+            lanes={lanes}
+            drivers={drivers}
+            onRefresh={fetchLanes}
+            onClose={() => setShowLanes(false)}
           />
         )}
         {checkOutDriver && (

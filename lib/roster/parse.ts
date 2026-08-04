@@ -1,5 +1,6 @@
-import { LaneId, ShiftType } from '@/lib/types';
-import { mapLane, mapPeriod, normalizeName, shiftLabel } from './map';
+import { Lane, LaneId, ShiftType } from '@/lib/types';
+import { activeLanes } from '@/lib/lanes';
+import { matchLane, mapPeriod, normalizeName, shiftLabel } from './map';
 
 /** A normalized assignment ready to upsert into the `roster` table. */
 export interface ParsedRosterRow {
@@ -131,9 +132,18 @@ export function detectDateFromMatrix(matrix: string[][]): string | null {
 // Handles both layouts: a Location column, or location section-header rows
 // (as in the PDF export) tracked top-to-bottom.
 // ─────────────────────────────────────────────────────────────
-export function interpretMatrix(matrix: string[][]): { rows: ParsedRosterRow[]; warnings: string[] } {
+export function interpretMatrix(
+  matrix: string[][],
+  lanes: Lane[]
+): { rows: ParsedRosterRow[]; warnings: string[] } {
   const warnings: string[] = [];
   const rows: ParsedRosterRow[] = [];
+
+  // Rows may only map onto lanes currently on the board; the full list is still
+  // the distinctiveness universe for matchLane (see lib/roster/map.ts). Rows
+  // nothing claims fall into Other, or the first lane if Other is hidden.
+  const candidates = activeLanes(lanes);
+  const fallback = candidates.find((l) => l.id === 'other') ?? candidates[0];
 
   let header: ColumnMap | null = null;
   let currentLocation = '';
@@ -190,10 +200,10 @@ export function interpretMatrix(matrix: string[][]): { rows: ParsedRosterRow[]; 
 
     const role = get('role');
     const source_location = header.location !== undefined ? get('location') : currentLocation;
-    const lane = mapLane(source_location, role);
+    const lane = matchLane(candidates, lanes, source_location, role);
     if (!lane) {
       warnings.push(
-        `Row ${lineNo}: "${name}" — location "${source_location || '(none)'}" not recognized, placed in Other.`
+        `Row ${lineNo}: "${name}" — location "${source_location || '(none)'}" not recognized, placed in ${fallback?.label ?? '(no lane)'}.`
       );
     }
 
@@ -228,7 +238,7 @@ export function interpretMatrix(matrix: string[][]): { rows: ParsedRosterRow[]; 
       end_time,
       shift_label: shiftLabel(start_time, end_time),
       role,
-      lane: lane ?? 'other',
+      lane: lane?.id ?? fallback?.id ?? '',
       source_location,
     });
   }
@@ -240,14 +250,14 @@ export function interpretMatrix(matrix: string[][]): { rows: ParsedRosterRow[]; 
 }
 
 /** Parse a ShiftCrew CSV export. */
-export function parseRosterCsv(text: string): RosterParseResult {
+export function parseRosterCsv(text: string, lanes: Lane[]): RosterParseResult {
   const matrix = parseCsv(text);
-  const { rows, warnings } = interpretMatrix(matrix);
+  const { rows, warnings } = interpretMatrix(matrix, lanes);
   return { rows, warnings, detectedDate: detectDateFromText(text) ?? detectDateFromMatrix(matrix) };
 }
 
 /** Parse a pre-built cell matrix (used by the XLSX path). */
-export function parseRosterMatrix(matrix: string[][]): RosterParseResult {
-  const { rows, warnings } = interpretMatrix(matrix);
+export function parseRosterMatrix(matrix: string[][], lanes: Lane[]): RosterParseResult {
+  const { rows, warnings } = interpretMatrix(matrix, lanes);
   return { rows, warnings, detectedDate: detectDateFromMatrix(matrix) };
 }

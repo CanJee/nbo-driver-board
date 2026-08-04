@@ -1,15 +1,12 @@
-import { LANE_LABELS, LaneId } from '@/lib/types';
-
 interface LaneHeaderProps {
-  laneId: LaneId;
+  label: string;
   count: number;
   /** Search hits in this lane; null when no search is active. */
   matchCount?: number | null;
   dispatcher?: string;
 }
 
-export default function LaneHeader({ laneId, count, matchCount = null, dispatcher }: LaneHeaderProps) {
-  const label = LANE_LABELS[laneId];
+export default function LaneHeader({ label, count, matchCount = null, dispatcher }: LaneHeaderProps) {
   const searching = matchCount !== null;
 
   return (
