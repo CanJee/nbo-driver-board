@@ -192,15 +192,31 @@ export default function LanesModal({ lanes, drivers, onRefresh, onClose }: Lanes
                   </>
                 ) : (
                   <>
-                    <span className="flex-1 min-w-0 truncate text-sm font-bold">
-                      <span className={lane.active ? 'text-fg-strong' : 'text-fg-faint line-through'}>
-                        {lane.label}
+                    <span className="flex-1 min-w-0 text-sm font-bold">
+                      <span className="block truncate">
+                        <span className={lane.active ? 'text-fg-strong' : 'text-fg-faint line-through'}>
+                          {lane.label}
+                        </span>
+                        {!lane.active && (
+                          <span className="ml-1.5 text-[10px] font-semibold text-fg-faint">(hidden)</span>
+                        )}
                       </span>
-                      {!lane.active && (
-                        <span className="ml-1.5 text-[10px] font-semibold text-fg-faint">(hidden)</span>
+                      {/* Drivers in a hidden lane render in no column, so this
+                          line is the only place they surface. It replaces the
+                          header rescue chip: a standing warning on the board
+                          was noise, but the count has to live somewhere, and
+                          Show puts the lane and its cards straight back. */}
+                      {!lane.active && countIn(lane.id) > 0 && (
+                        <span
+                          className="block text-[10px] font-semibold leading-tight mt-0.5 whitespace-normal"
+                          style={{ color: 'var(--status-warn-fg)' }}
+                        >
+                          {countIn(lane.id)} driver{countIn(lane.id) === 1 ? '' : 's'} still here.
+                          Show to put them back on the board.
+                        </span>
                       )}
                     </span>
-                    {countIn(lane.id) > 0 && (
+                    {lane.active && countIn(lane.id) > 0 && (
                       <span
                         className="text-[10px] font-bold text-fg-muted tabular-nums flex-shrink-0"
                         title={`${countIn(lane.id)} drivers in this lane`}

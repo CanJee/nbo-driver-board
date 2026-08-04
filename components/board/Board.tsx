@@ -213,7 +213,6 @@ export default function Board({ initialDrivers, initialDispatchers, initialLanes
   const [dispatchers, setDispatchers] = useState<DispatcherAssignment[]>(initialDispatchers);
   const [lanes, setLanes] = useState<Lane[]>(initialLanes);
   const [showLanes, setShowLanes] = useState(false);
-  const [placingOrphans, setPlacingOrphans] = useState(false);
   const [activeDriver, setActiveDriver] = useState<Driver | null>(null);
   const [checkOutDriver, setCheckOutDriver] = useState<Driver | null>(null);
   const [assignDriver, setAssignDriver] = useState<Driver | null>(null);
@@ -483,51 +482,6 @@ export default function Board({ initialDrivers, initialDispatchers, initialLanes
   // Prevention half of the same problem — the dispatch board runs on venue TVs
   // and front-desk laptops that should not sleep mid-shift in the first place.
   useWakeLock(true);
-
-  // Drivers whose lane row is hidden or missing — legacy downtown_hotel rows,
-  // or a lane hidden from another device while cards were still in it. They
-  // render in no column, so surface them in the header with a one-tap rescue
-  // into the first lane (ridecrew's "without a zone" chip). Strictly better
-  // than the old hardcoded board, which showed such drivers nowhere at all.
-  const orphans = useMemo(
-    () => drivers.filter((d) => !liveLanes.some((l) => l.id === d.lane)),
-    [drivers, liveLanes]
-  );
-
-  const placeOrphans = async () => {
-    const target = liveLanes[0];
-    if (!target || orphans.length === 0 || placingOrphans) return;
-    setPlacingOrphans(true);
-    const base = nextLaneOrder(drivers, target.id);
-    const moves = orphans.map((d, i) => ({ id: d.id, lane_order: base + i }));
-    setDrivers((prev) =>
-      prev.map((d) => {
-        const m = moves.find((x) => x.id === d.id);
-        return m ? { ...d, lane: target.id, lane_order: m.lane_order } : d;
-      })
-    );
-    let failed: string | null = null;
-    try {
-      const results = await Promise.all(
-        moves.map((m) =>
-          supabase
-            .from('drivers')
-            .update({ lane: target.id, lane_order: m.lane_order })
-            .eq('id', m.id)
-            .select('id')
-        )
-      );
-      failed =
-        results.find((r) => r.error)?.error?.message ??
-        (results.some((r) => !r.error && (r.data?.length ?? 0) === 0)
-          ? 'no rows updated; you may be signed out'
-          : null);
-    } finally {
-      setPlacingOrphans(false);
-    }
-    if (failed) setToast(`Some moves didn't save (${failed}).`);
-    await fetchDrivers(); // pick up the trigger-stamped lane_entered_at
-  };
 
   // A lane's order exactly as it is rendered — and the single list the drag
   // handlers reorder against. Ordering is purely lane_order: an earlier version
@@ -980,28 +934,11 @@ export default function Board({ initialDrivers, initialDispatchers, initialLanes
             >
               <Search size={16} />
             </button>
-            {/* Rescue chip for drivers stranded in a hidden/deleted lane — rare,
-                so it only ever renders while there is something to rescue. */}
-            {orphans.length > 0 && liveLanes[0] && (
-              <button
-                type="button"
-                onClick={placeOrphans}
-                disabled={placingOrphans}
-                title={orphans.map((d) => d.name).join(', ')}
-                className="px-2 lg:px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition-opacity hover:opacity-80 disabled:opacity-50"
-                style={{
-                  backgroundColor: 'var(--status-warn-bg)',
-                  color: 'var(--status-warn-fg)',
-                  border: '1px solid #B45309',
-                }}
-              >
-                {/* The destination suffix costs ~110px and pushes the clock out
-                    of the header below 2xl — the tap does the same thing either
-                    way, so only spell it out where there is room. */}
-                ⚠ {orphans.length} in hidden lanes
-                <span className="hidden 2xl:inline"> → {liveLanes[0].label}</span>
-              </button>
-            )}
+            {/* No orphan/"in hidden lanes" chip here on purpose: hiding a lane
+                is a deliberate act, and a standing warning in the header is
+                noise on a board dispatch stares at all shift. The drivers are
+                still reachable — the Lanes modal spells out the count on a
+                hidden lane, and Show brings the lane and its cards back. */}
             <ZoomControl value={zoom} onChange={handleZoomChange} />
             <ThemeToggle />
             <button
