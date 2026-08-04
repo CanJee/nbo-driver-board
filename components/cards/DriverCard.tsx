@@ -262,10 +262,13 @@ function NoteBadge({ note, interactive }: { note: string; interactive: boolean }
           e.stopPropagation();
           setPinned((p) => !p);
         }}
-        className="flex items-center flex-shrink-0 px-1 py-0.5 rounded-full leading-none transition-colors hover:bg-black/5 dark:hover:bg-white/10"
+        // Bare icon, no chrome — a frame around it read as a button on a row
+        // where nothing else has one. The padded tap target is pulled back out
+        // with negative margins (as CopyablePhone does) so a touch-sized hit
+        // area doesn't widen the row or open a gap beside the status pills.
+        className="flex items-center flex-shrink-0 p-1 -m-1 rounded leading-none transition-colors hover:bg-black/5 dark:hover:bg-white/10"
         style={{
           color: 'var(--accent-blue)',
-          border: '1px solid var(--edge)',
           pointerEvents: interactive ? undefined : 'none',
         }}
       >
