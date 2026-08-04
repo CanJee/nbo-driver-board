@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Search, X, Plus } from 'lucide-react';
+import { Check, Search, X, Plus } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import {
   Driver,
@@ -425,9 +425,12 @@ export default function CheckInModal({ activeDrivers, lanes, onConfirm, onCancel
                 to check them back in.
               </p>
             ) : selected ? (
-              <p className="text-[10px] text-fg-faint mt-1.5 ml-1">
-                ✓ On today&apos;s roster · {selected.roles.join(', ')}
-                {selected.phone ? ` · ${selected.phone}` : ''}
+              <p className="flex items-center gap-1 text-[10px] text-fg-faint mt-1.5 ml-1">
+                <Check size={11} className="flex-shrink-0" />
+                <span>
+                  On today&apos;s roster · {selected.roles.join(', ')}
+                  {selected.phone ? ` · ${selected.phone}` : ''}
+                </span>
               </p>
             ) : query.trim() ? (
               <p className="text-[10px] text-amber-700 dark:text-amber-400 mt-1.5 ml-1">

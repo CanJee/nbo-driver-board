@@ -99,21 +99,14 @@ export const SHIFT_ORDER: Record<ShiftType, number> = {
 
 export const FLEET_DRIVER_ROLE = 'Fleet Driver';
 
-// Order here is the order of the buttons on the card — keep the three maps below
-// in step, and remember the away_reason CHECK constraint in the database has to
-// allow any key added here (see supabase/migrations/*_meals_away_reason.sql, the
-// newest of the constraint migrations — each new reason gets another one).
-export const AWAY_ICONS: Record<AwayReason, string> = {
-  gas: '⛽',
-  carwash: '🧼',
-  practice: '🎾',
-  parking: '🚐',
-  uptown_shuttle: '🏨',
-  // Appended rather than slotted in beside Practice: dispatchers tap these by
-  // position on a touchscreen, so an existing button must not move.
-  meals: '🍔',
-};
-
+// The away icons live in lib/away-icons.tsx — they are SVG components now (OS
+// emoji fonts drew them differently on Windows and Mac), and this module is
+// pulled into the server component graph via app/page.tsx, which is no place
+// for JSX. AWAY_ICONS's key order there is what orders the buttons on the card;
+// keep it in step with the two label maps below, and remember the away_reason
+// CHECK constraint in the database has to allow any key added to any of them
+// (see supabase/migrations/*_meals_away_reason.sql, the newest of the
+// constraint migrations — each new reason gets another one).
 export const AWAY_LABELS: Record<AwayReason, string> = {
   gas: 'Gas Station',
   carwash: 'Car Wash',
