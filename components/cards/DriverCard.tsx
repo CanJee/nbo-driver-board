@@ -505,7 +505,9 @@ export default function DriverCard({
             {/* Both parts keep their full text: the car number is never worth
                 abbreviating, so in a lane too narrow for both the badge wraps to
                 its own line (ml-auto keeps it right-aligned either way). */}
-            <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-xs mt-0.5 leading-snug">
+            {/* card-meta is a TEMPORARY hook for the lane spacing comparison
+                (see lib/board-prefs.ts); drop the class with that experiment. */}
+            <div className="card-meta flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-xs mt-0.5 leading-snug">
               {isUnassigned ? (
                 <span className="italic text-amber-700 dark:text-amber-400 flex-shrink-0">Car: --</span>
               ) : (

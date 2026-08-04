@@ -31,13 +31,17 @@ import {
 import { activeLanes, laneLabel } from '@/lib/lanes';
 import { matchDriver, SearchMatchField, SearchState } from '@/lib/search';
 import {
+  DEFAULT_SPACING,
   DEFAULT_ZOOM,
   LaneGrows,
   LaneWidthsPref,
   loadLaneWidths,
+  loadSpacing,
   loadZoom,
   saveLaneWidths,
+  saveSpacing,
   saveZoom,
+  SpacingMode,
 } from '@/lib/board-prefs';
 import { useLgUp } from '@/lib/useLgUp';
 import { useRefetchOnWake } from '@/lib/useRefetchOnWake';
@@ -46,6 +50,7 @@ import SwimLane from './SwimLane';
 import LaneTabs from './LaneTabs';
 import LaneResizer from './LaneResizer';
 import ZoomControl from './ZoomControl';
+import SpacingControl from './SpacingControl'; // TEMPORARY (see board-prefs)
 import SearchBox from './SearchBox';
 import LiveClock from './LiveClock';
 import SyncStatus, { StaleBanner } from './SyncStatus';
@@ -297,6 +302,7 @@ export default function Board({ initialDrivers, initialDispatchers, initialLanes
 
   const isLgUp = useLgUp();
   const [zoom, setZoom] = useState(DEFAULT_ZOOM);
+  const [spacing, setSpacing] = useState<SpacingMode>(DEFAULT_SPACING); // TEMPORARY (see board-prefs)
   const [laneWidths, setLaneWidths] = useState<LaneWidthsPref>({ mode: 'auto' });
   const [isResizing, setIsResizing] = useState(false);
   const [rowsPerCol, setRowsPerCol] = useState(DEFAULT_ROWS_PER_COL);
@@ -306,6 +312,7 @@ export default function Board({ initialDrivers, initialDispatchers, initialLanes
   // render agree on the defaults (same mount guard ThemeToggle uses).
   useEffect(() => {
     setZoom(loadZoom());
+    setSpacing(loadSpacing()); // TEMPORARY (see board-prefs)
   }, []);
 
   // Saved widths are only valid for the exact lane set on screen, so re-check
@@ -582,6 +589,12 @@ export default function Board({ initialDrivers, initialDispatchers, initialLanes
   const handleZoomChange = (next: number) => {
     setZoom(next);
     saveZoom(next);
+  };
+
+  // TEMPORARY (see board-prefs)
+  const handleSpacingChange = (next: SpacingMode) => {
+    setSpacing(next);
+    saveSpacing(next);
   };
 
   // ── DRAG START ──
@@ -888,6 +901,7 @@ export default function Board({ initialDrivers, initialDispatchers, initialLanes
     >
       <div
         className="flex flex-col h-dvh p-2 gap-2 lg:p-3 lg:gap-3 relative"
+        data-lane-spacing={spacing} /* TEMPORARY (see board-prefs) */
         style={{ backgroundColor: 'var(--surface-page)', '--board-zoom': zoom / 100 } as React.CSSProperties}
       >
 
@@ -940,6 +954,8 @@ export default function Board({ initialDrivers, initialDispatchers, initialLanes
                 still reachable — the Lanes modal spells out the count on a
                 hidden lane, and Show brings the lane and its cards back. */}
             <ZoomControl value={zoom} onChange={handleZoomChange} />
+            {/* TEMPORARY (see board-prefs) */}
+            <SpacingControl value={spacing} onChange={handleSpacingChange} />
             <ThemeToggle />
             <button
               type="button"

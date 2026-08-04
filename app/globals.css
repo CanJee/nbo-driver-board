@@ -256,6 +256,58 @@ body {
     align-items: start;
   }
 
+  /* ─── TEMPORARY: lane spacing comparison ──────────────────────────────────
+     Two candidate fixes for the uneven gaps a tall card creates in the column
+     beside it. Selected by the header control; see lib/board-prefs.ts for the
+     full note and the removal checklist. Both live here, in the same lg+ media
+     query as the grid they override, because the columns only exist at lg+.
+
+     A — "even": each column packs its own cards, so a tall card no longer
+     pushes apart the cards beside it. Multi-column rather than the grid, since
+     a grid row is shared across columns by definition and that sharing IS the
+     bug. Reading order is unchanged (down a column, then over to the next), and
+     column-count caps the columns at what the lane was sized for. break-inside
+     stops a card being split down the middle across the column boundary.
+
+     KNOWN TRADE-OFF, measured: if a lane's cards ever exceed its height, a
+     multi-column box fragments sideways into extra columns instead of scrolling
+     down — the lane then scrolls horizontally and the overflow cards sit off
+     the right edge. Today's grid degrades better there, falling back to one
+     column and a vertical scroll. It needs a lane shorter than its contents to
+     show up (~400px tall in testing); at TV height with the board's own
+     row/column sizing, nothing overflowed. Fixing it properly needs the
+     multicol box to be auto-height inside the scroller, i.e. a wrapper element
+     between the lane and the cards, which is a bigger change than an
+     experiment should make. Judge it on the preview before committing to A. */
+  [data-lane-spacing='even'] .lane-scroll.lane-grid {
+    display: block;
+    column-count: var(--lane-cols, 1);
+    column-gap: var(--card-gap);
+  }
+
+  [data-lane-spacing='even'] .lane-scroll.lane-grid > * {
+    break-inside: avoid;
+    margin-bottom: var(--card-gap);
+  }
+
+  /* B — "nowrap": leaves the grid alone and removes the height difference at
+     source, by keeping the note/status cluster on the car line instead of
+     letting it wrap. Something has to give in a narrow lane: here the car
+     number truncates, since the badges are fixed-width and the cluster is the
+     part a dispatcher scans for. */
+  [data-lane-spacing='nowrap'] .card-meta {
+    flex-wrap: nowrap;
+  }
+
+  [data-lane-spacing='nowrap'] .card-meta > :first-child {
+    flex-shrink: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  /* ─── end TEMPORARY ────────────────────────────────────────────────────── */
+
   /* The drag ghost renders outside the zoomed board, so it needs the same zoom
      to match the size of the card it was picked up from. */
   .overlay-zoom {

@@ -56,6 +56,38 @@ export function saveZoom(zoom: number): void {
   writeJson(ZOOM_KEY, { v: 1, zoom });
 }
 
+// ─── TEMPORARY: lane spacing comparison ──────────────────────────────────────
+// Two candidate fixes for the uneven gaps between cards in a wrapped lane, put
+// behind a header control so both can be judged on the real board with real
+// data. Nothing here is meant to ship: once one wins, delete this block,
+// SpacingControl.tsx, the [data-lane-spacing] rules in globals.css, the
+// `card-meta` class in DriverCard, and the four `spacing` lines in Board.
+//
+//   current — today's behaviour: a lane is a grid whose rows are as tall as the
+//             tallest card across BOTH columns, so one tall card pushes apart
+//             the cards beside it in the other column.
+//   even    — each column packs its own cards with an identical gap, so a tall
+//             card only affects the column it is in.
+//   nowrap  — keeps the grid, but stops the note/status badges wrapping onto a
+//             second line, which is what makes a card taller than its
+//             neighbours in the first place.
+export const SPACING_MODES = ['current', 'even', 'nowrap'] as const;
+export type SpacingMode = (typeof SPACING_MODES)[number];
+export const DEFAULT_SPACING: SpacingMode = 'current';
+
+const SPACING_KEY = 'nbo-board.laneSpacing.v1';
+
+export function loadSpacing(): SpacingMode {
+  const data = readJson(SPACING_KEY) as { v?: number; mode?: SpacingMode } | null;
+  const mode = data?.v === 1 ? data.mode : undefined;
+  return SPACING_MODES.includes(mode as SpacingMode) ? (mode as SpacingMode) : DEFAULT_SPACING;
+}
+
+export function saveSpacing(mode: SpacingMode): void {
+  writeJson(SPACING_KEY, { v: 1, mode });
+}
+// ─── end TEMPORARY ───────────────────────────────────────────────────────────
+
 /**
  * Reads saved lane widths, falling back to 'auto' unless every currently
  * rendered lane has a sane saved weight — so adding or removing a lane discards
