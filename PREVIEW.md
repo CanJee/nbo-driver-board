@@ -51,6 +51,19 @@ live prod. (Production deploys are unchanged: they use the prod project.)
 `vercel.json` makes Vercel use the build script automatically — no Vercel build-setting
 changes needed.
 
+## Previews are single-host
+
+Production reaches the same Supabase project on two hostnames and fails over
+between them per device (`NEXT_PUBLIC_SUPABASE_FALLBACK_URLS`, see
+[`lib/supabase/hosts.ts`](lib/supabase/hosts.ts)). Preview builds blank that
+variable in [`scripts/vercel-build.sh`](scripts/vercel-build.sh) so a preview can
+never fail over out of its branch DB and into production; `/status` on a preview
+therefore shows a single connection card and no failover behaviour.
+
+The session cookie's name is pinned (not derived from the hostname) so a browser
+keeps its login across a host switch. Preview logins made before that change was
+introduced are invalidated once — log in again with `PREVIEW_DISPATCHER_PASSWORD`.
+
 ## Keeping schema in sync
 
 `supabase/migrations/` is the source of truth for **preview/branch** databases. Any SQL

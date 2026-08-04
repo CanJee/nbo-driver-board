@@ -1,5 +1,6 @@
 import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
+import { AUTH_COOKIE_NAME } from './hosts';
 
 export async function createClient() {
   const cookieStore = await cookies();
@@ -8,6 +9,9 @@ export async function createClient() {
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
+      // Pinned, not derived from the URL, so the session survives a browser
+      // failing over to the other host (see AUTH_COOKIE_NAME).
+      cookieOptions: { name: AUTH_COOKIE_NAME },
       cookies: {
         getAll() {
           return cookieStore.getAll();

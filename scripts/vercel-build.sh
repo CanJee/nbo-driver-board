@@ -12,6 +12,15 @@ if [ "${VERCEL_ENV:-}" = "preview" ] && [ -n "${SUPABASE_URL:-}" ]; then
   echo "[vercel-build] Preview: aliased NEXT_PUBLIC_SUPABASE_URL to the preview branch."
 fi
 
+# The prod fallback hosts are project-scoped in Vercel, so without this a preview
+# build would inline them and could fail over out of its branch DB and into PROD.
+# Unconditional (not nested above) so it also covers a preview built without the
+# Supabase integration injecting anything.
+if [ "${VERCEL_ENV:-}" = "preview" ]; then
+  export NEXT_PUBLIC_SUPABASE_FALLBACK_URLS=""
+  echo "[vercel-build] Preview: blanked NEXT_PUBLIC_SUPABASE_FALLBACK_URLS (single-host by design)."
+fi
+
 # Seed the freshly-created preview branch DB with a copy of prod data.
 # Self-skips on non-preview builds and when prod credentials aren't configured.
 node scripts/clone-prod-to-preview.mjs
