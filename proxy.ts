@@ -1,6 +1,7 @@
 import { createServerClient } from '@supabase/ssr';
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
+import { AUTH_COOKIE_NAME } from '@/lib/supabase/hosts';
 
 export async function proxy(request: NextRequest) {
   let response = NextResponse.next({ request });
@@ -9,6 +10,9 @@ export async function proxy(request: NextRequest) {
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
+      // Must match the browser and server clients — a mismatch here logs
+      // everyone out on the next request (see AUTH_COOKIE_NAME).
+      cookieOptions: { name: AUTH_COOKIE_NAME },
       cookies: {
         getAll() {
           return request.cookies.getAll();

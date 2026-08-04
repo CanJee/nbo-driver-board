@@ -41,26 +41,48 @@ export function useSyncAge(downSince: number | null): { stale: boolean; mounted:
  * NOT LIVE once it has been down past the grace period. The label only fits
  * the roomiest headers; the dot alone still reads at a glance below 2xl.
  */
-export default function SyncStatus({ downSince }: { downSince: number | null }) {
+export default function SyncStatus({
+  downSince,
+  backup = false,
+}: {
+  downSince: number | null;
+  /** True while this device is talking to the backup database host. */
+  backup?: boolean;
+}) {
   const { stale, mounted } = useSyncAge(downSince);
   if (!mounted) return null;
 
   return (
-    <span
-      title={stale ? 'Live updates are down; reconnecting' : 'Live updates connected'}
-      className="flex items-center gap-1.5 px-2 py-1 rounded-full text-[10px] lg:text-xs font-bold uppercase tracking-widest whitespace-nowrap"
-      style={
-        stale
-          ? { backgroundColor: 'var(--status-warn-strong-bg)', color: 'var(--status-warn-fg)' }
-          : { backgroundColor: 'var(--status-success-strong-bg)', color: 'var(--status-success-bright)' }
-      }
-    >
+    <>
       <span
-        className="inline-block w-2 h-2 rounded-full flex-shrink-0"
-        style={{ backgroundColor: stale ? 'var(--status-warn)' : 'var(--status-success)' }}
-      />
-      <span className="hidden 2xl:inline">{stale ? 'Not Live' : 'Live'}</span>
-    </span>
+        title={stale ? 'Live updates are down; reconnecting' : 'Live updates connected'}
+        className="flex items-center gap-1.5 px-2 py-1 rounded-full text-[10px] lg:text-xs font-bold uppercase tracking-widest whitespace-nowrap"
+        style={
+          stale
+            ? { backgroundColor: 'var(--status-warn-strong-bg)', color: 'var(--status-warn-fg)' }
+            : { backgroundColor: 'var(--status-success-strong-bg)', color: 'var(--status-success-bright)' }
+        }
+      >
+        <span
+          className="inline-block w-2 h-2 rounded-full flex-shrink-0"
+          style={{ backgroundColor: stale ? 'var(--status-warn)' : 'var(--status-success)' }}
+        />
+        <span className="hidden 2xl:inline">{stale ? 'Not Live' : 'Live'}</span>
+      </span>
+      {/* Neutral, not a warning: the board is working normally, just over the
+          other database hostname. It matters only when someone is diagnosing
+          why one device behaves differently from the one beside it. */}
+      {backup && (
+        <span
+          title="Using the backup database connection — see the Status page"
+          className="flex items-center gap-1.5 px-2 py-1 rounded-full text-[10px] lg:text-xs font-bold uppercase tracking-widest whitespace-nowrap"
+          style={{ backgroundColor: 'var(--surface-badge-muted)', color: '#fff' }}
+        >
+          <span className="inline-block w-2 h-2 rounded-full flex-shrink-0 bg-white/70" />
+          <span className="hidden 2xl:inline">Backup DB</span>
+        </span>
+      )}
+    </>
   );
 }
 

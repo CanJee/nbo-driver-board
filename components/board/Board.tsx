@@ -17,7 +17,13 @@ import {
   useSensors,
 } from '@dnd-kit/core';
 import { arrayMove } from '@dnd-kit/sortable';
-import { createClient } from '@/lib/supabase/client';
+import { useSupabase } from '@/lib/supabase/client';
+import {
+  FAILOVER_RETRY_MS,
+  REALTIME_FAILOVER_MS,
+  findHealthyHost,
+  noteRestFailure,
+} from '@/lib/supabase/hosts';
 import {
   AwayReason,
   DispatcherAssignment,
@@ -266,6 +272,11 @@ export default function Board({ initialDrivers, initialDispatchers, initialLanes
   // are misclassified as within-lane no-ops and never persisted.
   const dragSourceLaneRef = useRef<LaneId | null>(null);
 
+  // Which database host the drag started on. A failover mid-drop would leave
+  // the drop's own refetch pointed at the client that just lost the route, so
+  // the board would keep showing the optimistic order with nothing behind it.
+  const dragHostRef = useRef<string | null>(null);
+
   // The columns the board shows, in saved order — pinned for the duration of a
   // drag (ridecrew's staging-board pattern): a lane hidden or added on another
   // device mid-drag would shift every drop rect dnd-kit measured at drag start.
@@ -279,7 +290,10 @@ export default function Board({ initialDrivers, initialDispatchers, initialLanes
     [renderedLanes]
   );
 
-  const supabase = createClient();
+  // The client can change under us: if this device loses its route to the
+  // active database host, the board fails over to the other hostname and every
+  // effect below re-runs against the new client (see lib/supabase/hosts.ts).
+  const { supabase, activeUrl, isPrimary } = useSupabase();
 
   // Mouse drags after 8px of movement (prevents conflict with click-to-expand);
   // touch drags after a 200ms press-and-hold so quick swipes keep scrolling the
@@ -387,11 +401,14 @@ export default function Board({ initialDrivers, initialDispatchers, initialLanes
   const emptyIsReal = useCallback(async () => {
     const { data } = await supabase.auth.getSession();
     return data.session !== null;
-  }, []);
+  }, [supabase]);
 
+  // postgrest resolves a network-level failure as status 0 rather than
+  // throwing, so this — not a try/catch — is how a host that has stopped
+  // answering this device gets reported to the failover logic.
   const fetchDrivers = useCallback(async () => {
     if (isDraggingRef.current) return;
-    const { data } = await supabase
+    const { data, status } = await supabase
       .from('drivers')
       .select('*')
       .is('checked_out_at', null)
@@ -399,18 +416,20 @@ export default function Board({ initialDrivers, initialDispatchers, initialLanes
       // briefly share a lane_order can swap places between refetches.
       .order('lane_order', { ascending: true })
       .order('checked_in_at', { ascending: true });
+    if (status === 0) noteRestFailure();
     if (!data) return;
     if (data.length === 0 && !(await emptyIsReal())) return;
     setDrivers(data as Driver[]);
-  }, [emptyIsReal]);
+  }, [supabase, emptyIsReal]);
 
   const fetchDispatchers = useCallback(async () => {
     if (isDraggingRef.current) return;
-    const { data } = await supabase.from('dispatcher_assignments').select('*');
+    const { data, status } = await supabase.from('dispatcher_assignments').select('*');
+    if (status === 0) noteRestFailure();
     if (!data) return;
     if (data.length === 0 && !(await emptyIsReal())) return;
     setDispatchers(data as DispatcherAssignment[]);
-  }, [emptyIsReal]);
+  }, [supabase, emptyIsReal]);
 
   // ── REALTIME HEALTH ──
   // The subscription is this board's lifeline, and Supabase never replays the
@@ -440,7 +459,9 @@ export default function Board({ initialDrivers, initialDispatchers, initialLanes
       .on('postgres_changes', { event: '*', schema: 'public', table: 'drivers' }, fetchDrivers)
       .subscribe((status) => trackChannelStatus('drivers', status, fetchDrivers));
     return () => { supabase.removeChannel(channel); };
-  }, [fetchDrivers, trackChannelStatus]);
+    // `supabase` changes on failover: the cleanup tears the channel down on the
+    // old client (captured here), then this resubscribes on the new one.
+  }, [supabase, fetchDrivers, trackChannelStatus]);
 
   useEffect(() => {
     const channel = supabase
@@ -448,18 +469,19 @@ export default function Board({ initialDrivers, initialDispatchers, initialLanes
       .on('postgres_changes', { event: '*', schema: 'public', table: 'dispatcher_assignments' }, fetchDispatchers)
       .subscribe((status) => trackChannelStatus('dispatchers', status, fetchDispatchers));
     return () => { supabase.removeChannel(channel); };
-  }, [fetchDispatchers, trackChannelStatus]);
+  }, [supabase, fetchDispatchers, trackChannelStatus]);
 
   const fetchLanes = useCallback(async () => {
     if (isDraggingRef.current) return;
-    const { data } = await supabase
+    const { data, status } = await supabase
       .from('lanes')
       .select(LANE_SELECT)
       .order('sort_order', { ascending: true });
+    if (status === 0) noteRestFailure();
     if (!data) return;
     if (data.length === 0 && !(await emptyIsReal())) return;
     setLanes(data as Lane[]);
-  }, [emptyIsReal]);
+  }, [supabase, emptyIsReal]);
 
   useEffect(() => {
     const channel = supabase
@@ -467,7 +489,7 @@ export default function Board({ initialDrivers, initialDispatchers, initialLanes
       .on('postgres_changes', { event: '*', schema: 'public', table: 'lanes' }, fetchLanes)
       .subscribe((status) => trackChannelStatus('lanes', status, fetchLanes));
     return () => { supabase.removeChannel(channel); };
-  }, [fetchLanes, trackChannelStatus]);
+  }, [supabase, fetchLanes, trackChannelStatus]);
 
   // One "get fresh data now" entry point — a wake or refocus can't know what
   // changed while the device was asleep, so everything refetches.
@@ -476,8 +498,36 @@ export default function Board({ initialDrivers, initialDispatchers, initialLanes
   }, [fetchDrivers, fetchDispatchers, fetchLanes]);
 
   // A device waking from sleep must never sit on a pre-sleep board: its socket
-  // died during the nap and the missed events are gone for good.
-  useRefetchOnWake(fetchAll);
+  // died during the nap and the missed events are gone for good. A wake is also
+  // the moment a network has most likely changed underneath us, so a board that
+  // was already down re-tests its host at the same time.
+  const handleWake = useCallback(() => {
+    fetchAll();
+    if (realtimeDownSince !== null) void findHealthyHost('wake');
+  }, [fetchAll, realtimeDownSince]);
+
+  useRefetchOnWake(handleWake);
+
+  // ── FAILOVER ──
+  // Realtime staying down is the first sign that this device has lost its route
+  // to the database host — the venue's security stack has blocked a hostname
+  // mid-tournament before, on some machines and not others. After the "Not
+  // live" banner has had time to appear, start looking for a host this device
+  // can still reach; findHealthyHost keeps the current one if it answers, so a
+  // Supabase-side incident (which affects every hostname equally) won't churn.
+  useEffect(() => {
+    if (realtimeDownSince === null) return;
+    let retry: ReturnType<typeof setInterval> | undefined;
+    const firstAttemptIn = Math.max(0, realtimeDownSince + REALTIME_FAILOVER_MS - Date.now());
+    const timer = setTimeout(() => {
+      void findHealthyHost('realtime-down');
+      retry = setInterval(() => void findHealthyHost('realtime-down'), FAILOVER_RETRY_MS);
+    }, firstAttemptIn);
+    return () => {
+      clearTimeout(timer);
+      if (retry) clearInterval(retry);
+    };
+  }, [realtimeDownSince, activeUrl]);
 
   // Prevention half of the same problem — the dispatch board runs on venue TVs
   // and front-desk laptops that should not sleep mid-shift in the first place.
@@ -593,6 +643,7 @@ export default function Board({ initialDrivers, initialDispatchers, initialLanes
       pinnedLanesRef.current = liveLanes;
       setActiveDriver(driver);
       dragSourceLaneRef.current = driver.lane; // capture original lane before any optimistic updates
+      dragHostRef.current = activeUrl; // see the drop handler's reconcile
     }
   };
 
@@ -737,7 +788,12 @@ export default function Board({ initialDrivers, initialDispatchers, initialLanes
     if (failed) {
       setToast(`Move didn't save (${failed}). Refreshing the board.`);
       await fetchDrivers();
+    } else if (dragHostRef.current !== activeUrl) {
+      // Failover landed mid-drop: the writes above went to the host we just
+      // left, so trust the new one over the optimistic state.
+      fetchAll();
     }
+    dragHostRef.current = null;
   };
 
   // ── CHECK OUT ──
@@ -963,7 +1019,7 @@ export default function Board({ initialDrivers, initialDispatchers, initialLanes
             >
               + Check In
             </button>
-            <SyncStatus downSince={realtimeDownSince} />
+            <SyncStatus downSince={realtimeDownSince} backup={!isPrimary} />
             <LiveClock className="text-lg lg:text-2xl" />
           </div>
         </div>
@@ -1075,14 +1131,24 @@ export default function Board({ initialDrivers, initialDispatchers, initialLanes
         </div>
         {/* Footer */}
         <div className="absolute bottom-0 left-0 right-0 flex items-center justify-between px-4 py-1.5 pointer-events-none">
-          <form action={logout} className="pointer-events-auto">
-            <button
-              type="submit"
-              className="text-[10px] font-bold uppercase tracking-widest text-fg-ghost hover:text-fg-muted transition-colors"
+          <div className="flex items-center gap-3">
+            <form action={logout} className="pointer-events-auto">
+              <button
+                type="submit"
+                className="text-[10px] font-bold uppercase tracking-widest text-fg-ghost hover:text-fg-muted transition-colors"
+              >
+                Sign Out
+              </button>
+            </form>
+            {/* Where to look when the board says it isn't live: which database
+                host this device can reach, and whether a provider is down. */}
+            <Link
+              href="/status"
+              className="text-[10px] font-bold uppercase tracking-widest text-fg-ghost hover:text-fg-muted transition-colors pointer-events-auto"
             >
-              Sign Out
-            </button>
-          </form>
+              Status
+            </Link>
+          </div>
           <p className="text-[10px] text-fg-ghost tracking-wide">
             Designed &amp; built by{' '}
             <a
