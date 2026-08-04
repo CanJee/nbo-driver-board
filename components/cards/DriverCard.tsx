@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
-import { Check, ChevronUp, Copy, GripVertical, Pencil, Save, X } from 'lucide-react';
+import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
+import { Check, ChevronUp, Copy, GripVertical, Pencil, Save, StickyNote, Trash2, X } from 'lucide-react';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { AwayReason, Driver, Lane, LaneId, LocationStatus, SHIFT_COLORS, SHIFT_LABELS, AWAY_ICONS, AWAY_LABELS, AWAY_SHORT_LABELS } from '@/lib/types';
@@ -9,6 +9,7 @@ import { activeLanes, laneLabel } from '@/lib/lanes';
 import { copyToClipboard } from '@/lib/clipboard';
 import { formatClockTime, formatDurationShort } from '@/lib/date';
 import { SearchMatchField } from '@/lib/search';
+import Portal from '@/components/ui/Portal';
 
 // Minute-granularity display, so re-rendering twice a minute is enough to keep
 // it honest. The component only exists while a card is expanded.
@@ -16,6 +17,14 @@ const LANE_TIMER_TICK_MS = 30_000;
 
 // How long the "Copied" / "Copy failed" confirmation stays up after a tap.
 const COPY_FEEDBACK_MS = 1600;
+
+// How long "Clear" stays armed as "Sure?" before dropping back to idle.
+const CLEAR_CONFIRM_MS = 3000;
+
+// Distance from the note popover to its badge, and the minimum it keeps from
+// the edges of the screen.
+const NOTE_POPOVER_GAP = 6;
+const NOTE_POPOVER_MARGIN = 8;
 
 /**
  * The driver's phone number, tap-to-copy.
@@ -87,6 +96,187 @@ function CopyablePhone({ phone }: { phone: string }) {
         {copied ? 'Phone number copied' : ''}
       </span>
     </div>
+  );
+}
+
+/**
+ * The note itself, in a popover anchored to its badge.
+ *
+ * Portalled to <body> because every lane is `overflow-hidden` around its own
+ * scroller: rendered inside the card this would be clipped at the lane's edge
+ * for exactly the cards that most need it — the rightmost lane, or the last
+ * card in a list. Position is measured once, on open; the badge can't move
+ * after that without a scroll or a resize, and NoteBadge closes on both.
+ *
+ * It deliberately does not inherit the board's TV zoom (like the modals and the
+ * toast, which are also portalled), so on a zoomed board the note reads at
+ * normal size rather than the board's.
+ */
+function NotePopover({
+  note,
+  anchorRef,
+  popoverRef,
+  id,
+}: {
+  note: string;
+  anchorRef: React.RefObject<HTMLButtonElement | null>;
+  popoverRef: React.RefObject<HTMLDivElement | null>;
+  id: string;
+}) {
+  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
+
+  // Layout effect so the measured position lands in the same frame the popover
+  // first paints. Until it does the box renders hidden rather than at 0,0.
+  useLayoutEffect(() => {
+    const el = popoverRef.current;
+    const anchor = anchorRef.current?.getBoundingClientRect();
+    if (!el || !anchor) return;
+    const { width, height } = el.getBoundingClientRect();
+
+    // documentElement.client*, not window.inner*: the latter counts the
+    // scrollbar (and on a phone reports the device width, not the layout
+    // viewport), which would let the popover clamp to space that isn't there
+    // and slip under the right-hand edge.
+    const viewW = document.documentElement.clientWidth;
+    const viewH = document.documentElement.clientHeight;
+
+    // Below the badge by default; flipped above when the card sits near the
+    // bottom of the screen, which is where a long note would run off it.
+    const below = anchor.bottom + NOTE_POPOVER_GAP;
+    const top =
+      below + height > viewH - NOTE_POPOVER_MARGIN
+        ? Math.max(NOTE_POPOVER_MARGIN, anchor.top - NOTE_POPOVER_GAP - height)
+        : below;
+
+    // Centred on the badge, then clamped into the viewport so a card in the
+    // rightmost lane doesn't push the note off the side of the screen.
+    const maxLeft = Math.max(NOTE_POPOVER_MARGIN, viewW - width - NOTE_POPOVER_MARGIN);
+    const left = Math.min(
+      Math.max(NOTE_POPOVER_MARGIN, anchor.left + anchor.width / 2 - width / 2),
+      maxLeft,
+    );
+
+    setPos({ top, left });
+  }, [anchorRef, popoverRef, note]);
+
+  return (
+    <div
+      ref={popoverRef}
+      id={id}
+      role="tooltip"
+      className="fixed z-50 rounded-md shadow-xl p-2.5"
+      style={{
+        top: pos?.top ?? 0,
+        left: pos?.left ?? 0,
+        visibility: pos ? 'visible' : 'hidden',
+        maxWidth: 'min(280px, calc(100vw - 16px))',
+        backgroundColor: 'var(--surface-card)',
+        border: '1px solid var(--edge)',
+      }}
+    >
+      <div className="text-[10px] font-bold tracking-widest uppercase text-fg-faint mb-1">Note</div>
+      {/* The caption stays put while a long note scrolls under it. */}
+      <div className="text-sm text-fg-soft leading-relaxed whitespace-pre-wrap break-words max-h-48 overflow-y-auto">
+        {note}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Collapsed-card note indicator — hover, or tap, to read the note in place.
+ *
+ * Notes were visible only inside an expanded card, so finding out who had one
+ * meant opening and closing every card on the board.
+ *
+ * `interactive` is false for the drag ghost, which shows the badge (so the
+ * ghost matches the card it was picked up from) but must never open a popover.
+ */
+function NoteBadge({ note, interactive }: { note: string; interactive: boolean }) {
+  const [hovering, setHovering] = useState(false);
+  const [pinned, setPinned] = useState(false);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const popoverRef = useRef<HTMLDivElement>(null);
+  const popoverId = useId();
+
+  const open = interactive && (hovering || pinned);
+
+  // The popover is positioned once, so anything that moves the badge closes it
+  // instead of leaving a note floating away from its card. Lanes scroll
+  // independently of the page, hence capture phase — scroll doesn't bubble.
+  useEffect(() => {
+    if (!open) return;
+    const close = () => {
+      setHovering(false);
+      setPinned(false);
+    };
+    window.addEventListener('scroll', close, true);
+    window.addEventListener('resize', close);
+    return () => {
+      window.removeEventListener('scroll', close, true);
+      window.removeEventListener('resize', close);
+    };
+  }, [open]);
+
+  // Pinning is the touchscreen path (and a click, for mouse users), so it needs
+  // the dismissals a hover gets for free: tap elsewhere, or Escape.
+  useEffect(() => {
+    if (!pinned) return;
+    const onPointerDown = (e: PointerEvent) => {
+      const target = e.target as Node;
+      if (buttonRef.current?.contains(target) || popoverRef.current?.contains(target)) return;
+      setPinned(false);
+    };
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setPinned(false);
+    };
+    document.addEventListener('pointerdown', onPointerDown, true);
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('pointerdown', onPointerDown, true);
+      document.removeEventListener('keydown', onKeyDown);
+    };
+  }, [pinned]);
+
+  return (
+    <>
+      <button
+        ref={buttonRef}
+        type="button"
+        aria-label="Show note"
+        aria-expanded={pinned}
+        aria-describedby={open ? popoverId : undefined}
+        // Hover is a mouse-only affordance: a touchscreen fires a synthetic
+        // enter just before the tap's click, which would open the popover and
+        // let that same click immediately unpin it. The buttons check keeps
+        // notes from popping open under a card being dragged past.
+        onPointerEnter={(e) => {
+          if (e.pointerType === 'mouse' && e.buttons === 0) setHovering(true);
+        }}
+        onPointerLeave={() => setHovering(false)}
+        onFocus={() => setHovering(true)}
+        onBlur={() => setHovering(false)}
+        // The whole collapsed card expands on click, so without this a tap on
+        // the badge would open the card instead of showing the note.
+        onClick={(e) => {
+          e.stopPropagation();
+          setPinned((p) => !p);
+        }}
+        className="flex items-center flex-shrink-0 px-1 py-0.5 rounded-full leading-none transition-colors hover:bg-black/5 dark:hover:bg-white/10"
+        style={{
+          color: 'var(--accent-blue)',
+          border: '1px solid var(--edge)',
+          pointerEvents: interactive ? undefined : 'none',
+        }}
+      >
+        <StickyNote size={11} />
+      </button>
+      {open && (
+        <Portal>
+          <NotePopover note={note} anchorRef={buttonRef} popoverRef={popoverRef} id={popoverId} />
+        </Portal>
+      )}
+    </>
   );
 }
 
@@ -173,6 +363,19 @@ export default function DriverCard({
   const [expanded, setExpanded] = useState(false);
   const [editingNotes, setEditingNotes] = useState(false);
   const [notesValue, setNotesValue] = useState(driver.notes ?? '');
+  const [confirmingClear, setConfirmingClear] = useState(false);
+
+  // One definition of "this driver has a note", shared by the collapsed card's
+  // badge and the expanded card's Clear button. Board stores `notes || null`,
+  // but a note typed as whitespace would still arrive as a string.
+  const noteText = driver.notes?.trim() ?? '';
+
+  // Drop the armed "Sure?" back to "Clear" if the second tap never comes.
+  useEffect(() => {
+    if (!confirmingClear) return;
+    const id = setTimeout(() => setConfirmingClear(false), CLEAR_CONFIRM_MS);
+    return () => clearTimeout(id);
+  }, [confirmingClear]);
 
   // Keep notesValue in sync if the driver prop updates from Supabase
   useEffect(() => {
@@ -237,6 +440,17 @@ export default function DriverCard({
     setEditingNotes(false);
   };
 
+  // Two taps to clear. The board lives on a touchscreen and there is no undo,
+  // so a single mis-tap next to Edit would silently drop a dispatcher's note.
+  const handleClearNotes = () => {
+    if (!confirmingClear) {
+      setConfirmingClear(true);
+      return;
+    }
+    setConfirmingClear(false);
+    onUpdateNotes(driver, '');
+  };
+
   return (
     <div
       ref={setNodeRef}
@@ -295,6 +509,7 @@ export default function DriverCard({
                 <span className="text-fg-soft flex-shrink-0">Car: {driver.car_number ?? '--'}</span>
               )}
               <span className="flex items-center gap-1.5 flex-shrink-0 ml-auto">
+                {noteText && <NoteBadge note={noteText} interactive={!isDragOverlay} />}
                 {driver.location_status === 'en_route' && (
                   <span
                     className="text-[9px] font-bold px-1.5 py-0.5 rounded-full leading-none"
@@ -519,12 +734,30 @@ export default function DriverCard({
             <div className="flex items-center justify-between mb-1">
               <span className="text-[10px] font-bold tracking-widest uppercase text-fg-faint">Notes</span>
               {!editingNotes && (
-                <button
-                  onClick={() => setEditingNotes(true)}
-                  className="flex items-center gap-1 text-[10px] text-fg-faint hover:text-accent-blue transition-colors"
-                >
-                  <Pencil size={11} /><span>Edit</span>
-                </button>
+                <div className="flex items-center gap-2.5">
+                  {/* Only offered when there is something to clear. Edit keeps
+                      its usual spot at the right edge. */}
+                  {noteText && (
+                    <button
+                      onClick={handleClearNotes}
+                      aria-label={confirmingClear ? 'Confirm clearing the note' : 'Clear the note'}
+                      className={`flex items-center gap-1 text-[10px] transition-colors ${
+                        confirmingClear ? 'text-brand font-bold' : 'text-fg-faint hover:text-brand'
+                      }`}
+                    >
+                      <Trash2 size={11} /><span>{confirmingClear ? 'Sure?' : 'Clear'}</span>
+                    </button>
+                  )}
+                  <button
+                    onClick={() => {
+                      setConfirmingClear(false);
+                      setEditingNotes(true);
+                    }}
+                    className="flex items-center gap-1 text-[10px] text-fg-faint hover:text-accent-blue transition-colors"
+                  >
+                    <Pencil size={11} /><span>Edit</span>
+                  </button>
+                </div>
               )}
             </div>
             {editingNotes ? (
