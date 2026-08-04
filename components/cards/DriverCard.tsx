@@ -706,14 +706,19 @@ export default function DriverCard({
               Away Status
             </div>
             {isAway ? (
-              <div className="flex items-center gap-2">
+              // flex-wrap because the longest reason ("Parking Lot Shuttle") plus the
+              // button is wider than a narrow lane: without it the label broke onto a
+              // second line and the button, which can't shrink, sat across it and
+              // overhung the card edge. Wrapping drops the button to its own row
+              // instead, where ml-auto still right-aligns it.
+              <div className="flex flex-wrap items-center gap-2">
                 <span className="text-sm flex items-center gap-1.5 min-w-0">
                   {AwayIcon && <AwayIcon size={14} className="flex-shrink-0" aria-hidden />}
                   <span className="text-fg-soft">{driver.away_reason && AWAY_LABELS[driver.away_reason]}</span>
                 </span>
                 <button
                   onClick={() => onSetAway(driver, null)}
-                  className="flex items-center gap-1 text-[11px] font-bold px-2.5 py-1 rounded text-white ml-auto"
+                  className="flex items-center gap-1 flex-shrink-0 text-[11px] font-bold px-2.5 py-1 rounded text-white ml-auto"
                   style={{ backgroundColor: 'var(--status-success)' }}
                 >
                   <Check size={12} />
