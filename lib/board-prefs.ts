@@ -20,6 +20,7 @@ export type LaneWidthsPref =
 // future schema change invalidate old values instead of misreading them.
 const ZOOM_KEY = 'nbo-board.zoom.v1';
 const WIDTHS_KEY = 'nbo-board.laneWidths.v1';
+const HEADER_KEY = 'nbo-board.headerCollapsed.v1';
 
 /** Sane range for a saved lane weight — rejects corrupt or absurd values. */
 const MIN_GROW = 0.2;
@@ -54,6 +55,21 @@ export function loadZoom(): number {
 
 export function saveZoom(zoom: number): void {
   writeJson(ZOOM_KEY, { v: 1, zoom });
+}
+
+/**
+ * Whether the dispatcher has hidden the board header to give the lanes its
+ * height. Anything other than an explicit saved `true` reads as expanded: a
+ * corrupt value must never leave someone on a board whose check-in, search and
+ * lane controls are all hidden.
+ */
+export function loadHeaderCollapsed(): boolean {
+  const data = readJson(HEADER_KEY) as { v?: number; collapsed?: boolean } | null;
+  return data?.v === 1 && data.collapsed === true;
+}
+
+export function saveHeaderCollapsed(collapsed: boolean): void {
+  writeJson(HEADER_KEY, { v: 1, collapsed });
 }
 
 /**

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { ArrowRight, Check, ChevronUp, Copy, GripVertical, Pencil, Save, StickyNote, Trash2, X } from 'lucide-react';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
@@ -10,11 +10,12 @@ import { activeLanes, laneLabel } from '@/lib/lanes';
 import { copyToClipboard } from '@/lib/clipboard';
 import { formatClockTime, formatDurationShort } from '@/lib/date';
 import { SearchMatchField } from '@/lib/search';
+import { useNow } from '@/lib/useNow';
 import Portal from '@/components/ui/Portal';
 
 // Minute-granularity display, so re-rendering twice a minute is enough to keep
-// it honest. The component only exists while a card is expanded.
-const LANE_TIMER_TICK_MS = 30_000;
+// both card timers honest. They only exist while a card is expanded.
+const TIMER_TICK_MS = 30_000;
 
 // How long the "Copied" / "Copy failed" confirmation stays up after a tap.
 const COPY_FEEDBACK_MS = 1600;
@@ -292,17 +293,7 @@ function NoteBadge({ note, interactive }: { note: string; interactive: boolean }
  * the UI ship before the migration has been run against prod.
  */
 function TimeInLane({ driver, label }: { driver: Driver; label: string }) {
-  // Elapsed time depends on the client clock, so there is no correct value to
-  // render on the server. Staying null until mounted keeps the first client
-  // render identical to the server's (the guard LiveClock and ThemeToggle use).
-  const [now, setNow] = useState<number | null>(null);
-
-  useEffect(() => {
-    const update = () => setNow(Date.now());
-    update();
-    const id = setInterval(update, LANE_TIMER_TICK_MS);
-    return () => clearInterval(id);
-  }, []);
+  const now = useNow(TIMER_TICK_MS);
 
   if (now === null || !driver.lane_entered_at) return null;
   const entered = Date.parse(driver.lane_entered_at);
@@ -321,6 +312,35 @@ function TimeInLane({ driver, label }: { driver: Driver; label: string }) {
         <span className="tabular-nums">{formatClockTime(driver.lane_entered_at)}</span>
       </div>
     </div>
+  );
+}
+
+/**
+ * How long the driver has been on their current away errand: "47m".
+ *
+ * Rides the Away Status section heading rather than the row below it, so it
+ * costs no height on an already-dense card and can never crowd the reason label
+ * or the Returned button in a narrow lane. Renders nothing when the stamp is
+ * missing or unparseable, which is what lets the UI ship before the migration
+ * has been run against prod (and covers drivers who were already away when it
+ * was, since that column is not backfilled).
+ */
+function AwayTimer({ driver }: { driver: Driver }) {
+  const now = useNow(TIMER_TICK_MS);
+
+  if (now === null || driver.status !== 'away' || !driver.away_since) return null;
+  const since = Date.parse(driver.away_since);
+  if (Number.isNaN(since)) return null;
+
+  return (
+    // fg-muted rather than the heading's fg-faint: an away card renders at
+    // opacity 0.5, which would wash a fainter grey out altogether.
+    <span
+      className="text-[10px] text-fg-muted tabular-nums leading-none"
+      title={`Away since ${formatClockTime(driver.away_since)}`}
+    >
+      {formatDurationShort(now - since)}
+    </span>
   );
 }
 
@@ -393,6 +413,91 @@ export default function DriverCard({
       notesRef.current?.focus({ preventScroll: true });
     }
   }, [editingNotes]);
+
+  const rootRef = useRef<HTMLDivElement | null>(null);
+
+  // The card's height at the instant a toggle was asked for — the "from" of the
+  // glide below. It stays null on every other render, which is what keeps the
+  // drag-overlay clone, realtime updates and the first mount from animating.
+  const prevHeightRef = useRef<number | null>(null);
+  // Only ever our own height animation. Never reach for el.getAnimations():
+  // CSS transitions are Animation objects too, so cancelling that set would
+  // snap dnd-kit's transform transition mid-settle after a drop.
+  const heightAnimRef = useRef<Animation | null>(null);
+
+  const toggleExpanded = useCallback((next: boolean) => {
+    // offsetHeight, not getBoundingClientRect: at lg+ the board is CSS-zoomed
+    // and getBoundingClientRect reports zoom-scaled pixels, so at 125% the
+    // glide would start from a height the card never actually had.
+    prevHeightRef.current = rootRef.current?.offsetHeight ?? null;
+    setExpanded(next);
+  }, []);
+
+  // Escape closes an expanded card — the no-aim exit for the dispatchers on
+  // laptops, who otherwise have to find a target with the trackpad. Skipped
+  // while a field has focus so the notes editor and the search box keep their
+  // own Escape behaviour. With several cards open it closes them all, which
+  // reads as "dismiss everything" rather than a surprise.
+  useEffect(() => {
+    if (!expanded) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape' || e.defaultPrevented) return;
+      const target = e.target as HTMLElement | null;
+      if (target?.closest('input, textarea, select, [contenteditable="true"]')) return;
+      toggleExpanded(false);
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, [expanded, toggleExpanded]);
+
+  // Glide the card between its collapsed and expanded heights. The two views
+  // still swap in one frame; what animates is the box they swap inside. A
+  // layout effect so the "to" height is measured after React has committed the
+  // new view but before the browser paints it at full size.
+  useLayoutEffect(() => {
+    const el = rootRef.current;
+    const prev = prevHeightRef.current;
+    prevHeightRef.current = null; // consume it: only explicit toggles animate
+    if (!el || prev === null) return; // mount, lane reparent, overlay clone
+
+    // Toggled again mid-glide. `prev` was read off the animating box, so it is
+    // the height the eye last saw and the reversal picks up from exactly there.
+    heightAnimRef.current?.cancel();
+    heightAnimRef.current = null;
+
+    // Scrolled here rather than when the animation ends: the DOM is already at
+    // its final size on this line, so `nearest` resolves against the geometry
+    // the card is heading for, and it costs nothing if the animation never
+    // runs. This is what stops an expand near the foot of a lane from leaving
+    // the card below the fold, and a collapse deep inside a tall card from
+    // dropping the now-60px card off the top. It does nothing at all when the
+    // card is already fully visible, so opening one mid-lane never jumps.
+    const next = el.offsetHeight;
+    el.scrollIntoView({ block: 'nearest' });
+
+    if (prev === next || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+
+    // overflow and flex-shrink are carried in the keyframes rather than set on
+    // the element and cleaned up afterwards. With no fill they revert the
+    // instant the animation ends, so there is no state to restore and no way to
+    // strand the card in a clipped state — which a missed finish event would
+    // otherwise do, and the height must go back to auto anyway so the notes
+    // editor and realtime updates can still grow the card.
+    //
+    // Clipping is what keeps the taller view from spilling out of the shorter
+    // box mid-flight. flex-shrink:0 has to ride along with it: clipping costs
+    // the card its automatic minimum size (per flexbox, min-height:auto
+    // resolves to 0 once overflow isn't visible), and a lane holding more cards
+    // than fit is an overflowing column flex container, which would crush the
+    // card to a sliver for the length of the animation.
+    heightAnimRef.current = el.animate(
+      [
+        { height: `${prev}px`, overflow: 'hidden', flexShrink: 0 },
+        { height: `${next}px`, overflow: 'hidden', flexShrink: 0 },
+      ],
+      { duration: 180, easing: 'ease-out' }
+    );
+  }, [expanded]);
 
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: driver.id,
@@ -477,7 +582,10 @@ export default function DriverCard({
 
   return (
     <div
-      ref={setNodeRef}
+      ref={(el) => {
+        setNodeRef(el);
+        rootRef.current = el;
+      }}
       style={{ ...containerStyle, ...style }}
       data-search-hit={searchHit ? '' : undefined}
       className="card-glow relative select-none"
@@ -501,7 +609,12 @@ export default function DriverCard({
       {!expanded && (
         // min-h (not fixed h) so the search snippet line can grow the card;
         // the drag handle uses self-stretch because h-full needs a fixed parent.
-        <div className="flex items-center min-h-[60px]" onMouseDown={dragMouseDown}>
+        // The ghost is excluded from the fade so picking a card up doesn't
+        // flash — it is a fresh mount of this same subtree.
+        <div
+          className={`flex items-center min-h-[60px] ${isDragOverlay ? '' : 'card-swap-in'}`}
+          onMouseDown={dragMouseDown}
+        >
           <div
             {...attributes}
             {...listeners}
@@ -512,7 +625,7 @@ export default function DriverCard({
           </div>
           <div
             className="flex-1 py-2 pr-3 cursor-pointer min-w-0"
-            onClick={() => setExpanded(true)}
+            onClick={() => toggleExpanded(true)}
           >
             {/* The name gets the full width of the card. The status badges used
                 to sit beside it, which cost the name ~90px and truncated half
@@ -577,17 +690,49 @@ export default function DriverCard({
 
       {/* ── EXPANDED VIEW ── */}
       {expanded && (
-        <div className="p-3" onClick={(e) => e.stopPropagation()}>
+        // Padding is per-side rather than p-3 so the sticky header below can
+        // reach the card's edges with -mx-3 and pt-3 of its own.
+        <div className="px-3 pb-3 card-swap-in" onClick={(e) => e.stopPropagation()}>
 
           {/* Name + drag + collapse. The whole header row is the mouse drag
               surface — grip, name and the dead space between them — while the
-              button-dense body below deliberately is not. */}
-          <div className="flex items-center justify-between mb-2" onMouseDown={dragMouseDown}>
+              button-dense body below deliberately is not.
+
+              Sticky, because an expanded card is taller than a lane on the
+              laptops and iPads dispatchers use: the collapse arrow used to
+              scroll off the top, stranding them mid-card with no way out but to
+              scroll back up. Pinned to the lane's scrollport it is always one
+              tap away, and the name stays visible as a label for whatever part
+              of the card they have scrolled to.
+
+              A tap anywhere on the strip collapses too — same dual-purpose
+              surface as the collapsed card, where this row is both the drag
+              handle and the tap target that expands it. */}
+          <div
+            // -top-2, not top-0: sticky pins to the scrollport's content box,
+            // which sits 8px below the lane's top edge because the lane list is
+            // padded (p-2). At top-0 the card's own body stayed visible
+            // scrolling through that 8px band above the header, which read as a
+            // rendering fault. -mx-3 spans the card's full width, stopping at
+            // the 6px shift-colour bar rather than covering it. rounded-tr
+            // because the card root is rounded but deliberately not clipped
+            // (overflow would break sticky), so a square corner here would paint
+            // over the curve — 5px is the 6px radius less the 1px border.
+            className="sticky -top-2 z-10 -mx-3 flex items-center justify-between px-3 pt-3 pb-2 rounded-tr-[5px] cursor-pointer"
+            // Opaque, or the body scrolls through it.
+            style={{ backgroundColor: 'var(--surface-card)' }}
+            onMouseDown={dragMouseDown}
+            onClick={() => toggleExpanded(false)}
+          >
             <div className="flex items-center gap-1.5 min-w-0">
               <div
                 {...attributes}
                 {...listeners}
                 suppressHydrationWarning
+                // Stops a click on the grip from also collapsing the card: a
+                // press that never travels dnd-kit's 8px activation distance
+                // isn't a drag, so it would otherwise land on the row's onClick.
+                onClick={(e) => e.stopPropagation()}
                 className="p-2 -m-2 rounded cursor-grab active:cursor-grabbing text-fg-ghost hover:text-fg-muted flex-shrink-0 touch-none"
               >
                 <GripVertical size={18} />
@@ -601,7 +746,7 @@ export default function DriverCard({
             <button
               type="button"
               aria-label="Collapse card"
-              onClick={() => setExpanded(false)}
+              onClick={() => toggleExpanded(false)}
               className="p-2 -m-2 ml-2 rounded-md text-fg-muted hover:text-fg-strong hover:bg-black/5 dark:hover:bg-white/10 flex-shrink-0 transition-colors"
             >
               <ChevronUp size={20} />
@@ -702,8 +847,13 @@ export default function DriverCard({
 
           {/* Away Status */}
           <div className="mb-3">
-            <div className="text-[10px] font-bold tracking-widest uppercase text-fg-faint mb-1.5">
-              Away Status
+            {/* Heading line doubles as the timer's home — the same trick the
+                Notes header uses for its Clear/Edit controls. */}
+            <div className="flex items-baseline justify-between gap-2 mb-1.5">
+              <span className="text-[10px] font-bold tracking-widest uppercase text-fg-faint">
+                Away Status
+              </span>
+              <AwayTimer driver={driver} />
             </div>
             {isAway ? (
               // flex-wrap because the longest reason ("Parking Lot Shuttle") plus the
