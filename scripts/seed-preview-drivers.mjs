@@ -56,6 +56,14 @@ const AWAY_REASONS = ['gas', 'carwash', 'practice', 'parking'];
  */
 const LANE_MINUTES_AGO = [0, 4, 18, 47, 96, 152, 213];
 
+/**
+ * The same idea for the away timer on an expanded card: a short errand, a long
+ * one, and one over an hour, so the readout is exercised in all three of
+ * formatDurationShort's formats. Set explicitly because the away_since trigger
+ * only fires on UPDATE — an insert keeps whatever value it is given.
+ */
+const AWAY_MINUTES_AGO = [7, 52, 118];
+
 /** One synthetic driver row. `i` is its index within the lane, and drives the variety. */
 function makeDriver(lane, i, laneOrder) {
   const shift = SHIFTS[i % SHIFTS.length];
@@ -90,6 +98,9 @@ function makeDriver(lane, i, laneOrder) {
     car_number: unassigned ? null : `C${String(laneOrder + 1).padStart(2, '0')}`,
     status: away ? 'away' : unassigned ? 'unassigned' : 'assigned',
     away_reason: away ? AWAY_REASONS[i % AWAY_REASONS.length] : null,
+    away_since: away
+      ? new Date(Date.now() - AWAY_MINUTES_AGO[i % AWAY_MINUTES_AGO.length] * 60_000).toISOString()
+      : null,
     lane,
     lane_order: laneOrder,
     lane_entered_at: new Date(

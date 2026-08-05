@@ -10,11 +10,12 @@ import { activeLanes, laneLabel } from '@/lib/lanes';
 import { copyToClipboard } from '@/lib/clipboard';
 import { formatClockTime, formatDurationShort } from '@/lib/date';
 import { SearchMatchField } from '@/lib/search';
+import { useNow } from '@/lib/useNow';
 import Portal from '@/components/ui/Portal';
 
 // Minute-granularity display, so re-rendering twice a minute is enough to keep
-// it honest. The component only exists while a card is expanded.
-const LANE_TIMER_TICK_MS = 30_000;
+// both card timers honest. They only exist while a card is expanded.
+const TIMER_TICK_MS = 30_000;
 
 // How long the "Copied" / "Copy failed" confirmation stays up after a tap.
 const COPY_FEEDBACK_MS = 1600;
@@ -292,17 +293,7 @@ function NoteBadge({ note, interactive }: { note: string; interactive: boolean }
  * the UI ship before the migration has been run against prod.
  */
 function TimeInLane({ driver, label }: { driver: Driver; label: string }) {
-  // Elapsed time depends on the client clock, so there is no correct value to
-  // render on the server. Staying null until mounted keeps the first client
-  // render identical to the server's (the guard LiveClock and ThemeToggle use).
-  const [now, setNow] = useState<number | null>(null);
-
-  useEffect(() => {
-    const update = () => setNow(Date.now());
-    update();
-    const id = setInterval(update, LANE_TIMER_TICK_MS);
-    return () => clearInterval(id);
-  }, []);
+  const now = useNow(TIMER_TICK_MS);
 
   if (now === null || !driver.lane_entered_at) return null;
   const entered = Date.parse(driver.lane_entered_at);
@@ -321,6 +312,35 @@ function TimeInLane({ driver, label }: { driver: Driver; label: string }) {
         <span className="tabular-nums">{formatClockTime(driver.lane_entered_at)}</span>
       </div>
     </div>
+  );
+}
+
+/**
+ * How long the driver has been on their current away errand: "47m".
+ *
+ * Rides the Away Status section heading rather than the row below it, so it
+ * costs no height on an already-dense card and can never crowd the reason label
+ * or the Returned button in a narrow lane. Renders nothing when the stamp is
+ * missing or unparseable, which is what lets the UI ship before the migration
+ * has been run against prod (and covers drivers who were already away when it
+ * was, since that column is not backfilled).
+ */
+function AwayTimer({ driver }: { driver: Driver }) {
+  const now = useNow(TIMER_TICK_MS);
+
+  if (now === null || driver.status !== 'away' || !driver.away_since) return null;
+  const since = Date.parse(driver.away_since);
+  if (Number.isNaN(since)) return null;
+
+  return (
+    // fg-muted rather than the heading's fg-faint: an away card renders at
+    // opacity 0.5, which would wash a fainter grey out altogether.
+    <span
+      className="text-[10px] text-fg-muted tabular-nums leading-none"
+      title={`Away since ${formatClockTime(driver.away_since)}`}
+    >
+      {formatDurationShort(now - since)}
+    </span>
   );
 }
 
@@ -393,6 +413,41 @@ export default function DriverCard({
       notesRef.current?.focus({ preventScroll: true });
     }
   }, [editingNotes]);
+
+  // Escape closes an expanded card — the no-aim exit for the dispatchers on
+  // laptops, who otherwise have to find a target with the trackpad. Skipped
+  // while a field has focus so the notes editor and the search box keep their
+  // own Escape behaviour. With several cards open it closes them all, which
+  // reads as "dismiss everything" rather than a surprise.
+  useEffect(() => {
+    if (!expanded) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape' || e.defaultPrevented) return;
+      const target = e.target as HTMLElement | null;
+      if (target?.closest('input, textarea, select, [contenteditable="true"]')) return;
+      setExpanded(false);
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, [expanded]);
+
+  // Keep the card in the lane's viewport across an expand or a collapse.
+  // Expanding one near the bottom used to leave most of it below the fold on a
+  // laptop, and collapsing after scrolling deep into a tall card dropped the
+  // now-60px card off the top of the lane entirely, losing the dispatcher's
+  // place. `nearest` does nothing when the card is already fully visible, so a
+  // card opened at the top of a lane never jumps.
+  const rootRef = useRef<HTMLDivElement | null>(null);
+  const settled = useRef(false);
+  useEffect(() => {
+    // Skip the mount pass, or every card on the board scrolls itself into view
+    // as the lane renders.
+    if (!settled.current) {
+      settled.current = true;
+      return;
+    }
+    rootRef.current?.scrollIntoView({ block: 'nearest' });
+  }, [expanded]);
 
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: driver.id,
@@ -477,7 +532,10 @@ export default function DriverCard({
 
   return (
     <div
-      ref={setNodeRef}
+      ref={(el) => {
+        setNodeRef(el);
+        rootRef.current = el;
+      }}
       style={{ ...containerStyle, ...style }}
       data-search-hit={searchHit ? '' : undefined}
       className="card-glow relative select-none"
@@ -577,17 +635,49 @@ export default function DriverCard({
 
       {/* ── EXPANDED VIEW ── */}
       {expanded && (
-        <div className="p-3" onClick={(e) => e.stopPropagation()}>
+        // Padding is per-side rather than p-3 so the sticky header below can
+        // reach the card's edges with -mx-3 and pt-3 of its own.
+        <div className="px-3 pb-3" onClick={(e) => e.stopPropagation()}>
 
           {/* Name + drag + collapse. The whole header row is the mouse drag
               surface — grip, name and the dead space between them — while the
-              button-dense body below deliberately is not. */}
-          <div className="flex items-center justify-between mb-2" onMouseDown={dragMouseDown}>
+              button-dense body below deliberately is not.
+
+              Sticky, because an expanded card is taller than a lane on the
+              laptops and iPads dispatchers use: the collapse arrow used to
+              scroll off the top, stranding them mid-card with no way out but to
+              scroll back up. Pinned to the lane's scrollport it is always one
+              tap away, and the name stays visible as a label for whatever part
+              of the card they have scrolled to.
+
+              A tap anywhere on the strip collapses too — same dual-purpose
+              surface as the collapsed card, where this row is both the drag
+              handle and the tap target that expands it. */}
+          <div
+            // -top-2, not top-0: sticky pins to the scrollport's content box,
+            // which sits 8px below the lane's top edge because the lane list is
+            // padded (p-2). At top-0 the card's own body stayed visible
+            // scrolling through that 8px band above the header, which read as a
+            // rendering fault. -mx-3 spans the card's full width, stopping at
+            // the 6px shift-colour bar rather than covering it. rounded-tr
+            // because the card root is rounded but deliberately not clipped
+            // (overflow would break sticky), so a square corner here would paint
+            // over the curve — 5px is the 6px radius less the 1px border.
+            className="sticky -top-2 z-10 -mx-3 flex items-center justify-between px-3 pt-3 pb-2 rounded-tr-[5px] cursor-pointer"
+            // Opaque, or the body scrolls through it.
+            style={{ backgroundColor: 'var(--surface-card)' }}
+            onMouseDown={dragMouseDown}
+            onClick={() => setExpanded(false)}
+          >
             <div className="flex items-center gap-1.5 min-w-0">
               <div
                 {...attributes}
                 {...listeners}
                 suppressHydrationWarning
+                // Stops a click on the grip from also collapsing the card: a
+                // press that never travels dnd-kit's 8px activation distance
+                // isn't a drag, so it would otherwise land on the row's onClick.
+                onClick={(e) => e.stopPropagation()}
                 className="p-2 -m-2 rounded cursor-grab active:cursor-grabbing text-fg-ghost hover:text-fg-muted flex-shrink-0 touch-none"
               >
                 <GripVertical size={18} />
@@ -702,8 +792,13 @@ export default function DriverCard({
 
           {/* Away Status */}
           <div className="mb-3">
-            <div className="text-[10px] font-bold tracking-widest uppercase text-fg-faint mb-1.5">
-              Away Status
+            {/* Heading line doubles as the timer's home — the same trick the
+                Notes header uses for its Clear/Edit controls. */}
+            <div className="flex items-baseline justify-between gap-2 mb-1.5">
+              <span className="text-[10px] font-bold tracking-widest uppercase text-fg-faint">
+                Away Status
+              </span>
+              <AwayTimer driver={driver} />
             </div>
             {isAway ? (
               // flex-wrap because the longest reason ("Parking Lot Shuttle") plus the

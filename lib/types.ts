@@ -55,6 +55,13 @@ export interface Driver {
   // change (see supabase/migrations/*_lane_entered_at.sql), never written by the
   // client. Nullable because prod serves rows without it until that SQL is run.
   lane_entered_at: string | null;
+  // When the current away spell started — stamped and cleared by a DB trigger on
+  // any status/away_reason write (see supabase/migrations/*_away_since.sql),
+  // never written by the client. Named `_since` rather than `_at` because it
+  // marks the start of an ongoing spell, not a completed event. Null whenever
+  // the driver isn't away, and absent entirely until that SQL is run against
+  // prod — so read it with a falsy check, never `=== null`.
+  away_since: string | null;
 }
 
 /** Which dispatcher is staffing a lane, shown under the lane's header. */
