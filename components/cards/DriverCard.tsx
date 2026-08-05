@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { ArrowRight, Check, ChevronUp, Copy, GripVertical, Pencil, Save, StickyNote, Trash2, X } from 'lucide-react';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
@@ -414,6 +414,25 @@ export default function DriverCard({
     }
   }, [editingNotes]);
 
+  const rootRef = useRef<HTMLDivElement | null>(null);
+
+  // The card's height at the instant a toggle was asked for — the "from" of the
+  // glide below. It stays null on every other render, which is what keeps the
+  // drag-overlay clone, realtime updates and the first mount from animating.
+  const prevHeightRef = useRef<number | null>(null);
+  // Only ever our own height animation. Never reach for el.getAnimations():
+  // CSS transitions are Animation objects too, so cancelling that set would
+  // snap dnd-kit's transform transition mid-settle after a drop.
+  const heightAnimRef = useRef<Animation | null>(null);
+
+  const toggleExpanded = useCallback((next: boolean) => {
+    // offsetHeight, not getBoundingClientRect: at lg+ the board is CSS-zoomed
+    // and getBoundingClientRect reports zoom-scaled pixels, so at 125% the
+    // glide would start from a height the card never actually had.
+    prevHeightRef.current = rootRef.current?.offsetHeight ?? null;
+    setExpanded(next);
+  }, []);
+
   // Escape closes an expanded card — the no-aim exit for the dispatchers on
   // laptops, who otherwise have to find a target with the trackpad. Skipped
   // while a field has focus so the notes editor and the search box keep their
@@ -425,28 +444,59 @@ export default function DriverCard({
       if (e.key !== 'Escape' || e.defaultPrevented) return;
       const target = e.target as HTMLElement | null;
       if (target?.closest('input, textarea, select, [contenteditable="true"]')) return;
-      setExpanded(false);
+      toggleExpanded(false);
     };
     document.addEventListener('keydown', onKeyDown);
     return () => document.removeEventListener('keydown', onKeyDown);
-  }, [expanded]);
+  }, [expanded, toggleExpanded]);
 
-  // Keep the card in the lane's viewport across an expand or a collapse.
-  // Expanding one near the bottom used to leave most of it below the fold on a
-  // laptop, and collapsing after scrolling deep into a tall card dropped the
-  // now-60px card off the top of the lane entirely, losing the dispatcher's
-  // place. `nearest` does nothing when the card is already fully visible, so a
-  // card opened at the top of a lane never jumps.
-  const rootRef = useRef<HTMLDivElement | null>(null);
-  const settled = useRef(false);
-  useEffect(() => {
-    // Skip the mount pass, or every card on the board scrolls itself into view
-    // as the lane renders.
-    if (!settled.current) {
-      settled.current = true;
-      return;
-    }
-    rootRef.current?.scrollIntoView({ block: 'nearest' });
+  // Glide the card between its collapsed and expanded heights. The two views
+  // still swap in one frame; what animates is the box they swap inside. A
+  // layout effect so the "to" height is measured after React has committed the
+  // new view but before the browser paints it at full size.
+  useLayoutEffect(() => {
+    const el = rootRef.current;
+    const prev = prevHeightRef.current;
+    prevHeightRef.current = null; // consume it: only explicit toggles animate
+    if (!el || prev === null) return; // mount, lane reparent, overlay clone
+
+    // Toggled again mid-glide. `prev` was read off the animating box, so it is
+    // the height the eye last saw and the reversal picks up from exactly there.
+    heightAnimRef.current?.cancel();
+    heightAnimRef.current = null;
+
+    // Scrolled here rather than when the animation ends: the DOM is already at
+    // its final size on this line, so `nearest` resolves against the geometry
+    // the card is heading for, and it costs nothing if the animation never
+    // runs. This is what stops an expand near the foot of a lane from leaving
+    // the card below the fold, and a collapse deep inside a tall card from
+    // dropping the now-60px card off the top. It does nothing at all when the
+    // card is already fully visible, so opening one mid-lane never jumps.
+    const next = el.offsetHeight;
+    el.scrollIntoView({ block: 'nearest' });
+
+    if (prev === next || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+
+    // overflow and flex-shrink are carried in the keyframes rather than set on
+    // the element and cleaned up afterwards. With no fill they revert the
+    // instant the animation ends, so there is no state to restore and no way to
+    // strand the card in a clipped state — which a missed finish event would
+    // otherwise do, and the height must go back to auto anyway so the notes
+    // editor and realtime updates can still grow the card.
+    //
+    // Clipping is what keeps the taller view from spilling out of the shorter
+    // box mid-flight. flex-shrink:0 has to ride along with it: clipping costs
+    // the card its automatic minimum size (per flexbox, min-height:auto
+    // resolves to 0 once overflow isn't visible), and a lane holding more cards
+    // than fit is an overflowing column flex container, which would crush the
+    // card to a sliver for the length of the animation.
+    heightAnimRef.current = el.animate(
+      [
+        { height: `${prev}px`, overflow: 'hidden', flexShrink: 0 },
+        { height: `${next}px`, overflow: 'hidden', flexShrink: 0 },
+      ],
+      { duration: 180, easing: 'ease-out' }
+    );
   }, [expanded]);
 
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
@@ -559,7 +609,12 @@ export default function DriverCard({
       {!expanded && (
         // min-h (not fixed h) so the search snippet line can grow the card;
         // the drag handle uses self-stretch because h-full needs a fixed parent.
-        <div className="flex items-center min-h-[60px]" onMouseDown={dragMouseDown}>
+        // The ghost is excluded from the fade so picking a card up doesn't
+        // flash — it is a fresh mount of this same subtree.
+        <div
+          className={`flex items-center min-h-[60px] ${isDragOverlay ? '' : 'card-swap-in'}`}
+          onMouseDown={dragMouseDown}
+        >
           <div
             {...attributes}
             {...listeners}
@@ -570,7 +625,7 @@ export default function DriverCard({
           </div>
           <div
             className="flex-1 py-2 pr-3 cursor-pointer min-w-0"
-            onClick={() => setExpanded(true)}
+            onClick={() => toggleExpanded(true)}
           >
             {/* The name gets the full width of the card. The status badges used
                 to sit beside it, which cost the name ~90px and truncated half
@@ -637,7 +692,7 @@ export default function DriverCard({
       {expanded && (
         // Padding is per-side rather than p-3 so the sticky header below can
         // reach the card's edges with -mx-3 and pt-3 of its own.
-        <div className="px-3 pb-3" onClick={(e) => e.stopPropagation()}>
+        <div className="px-3 pb-3 card-swap-in" onClick={(e) => e.stopPropagation()}>
 
           {/* Name + drag + collapse. The whole header row is the mouse drag
               surface — grip, name and the dead space between them — while the
@@ -667,7 +722,7 @@ export default function DriverCard({
             // Opaque, or the body scrolls through it.
             style={{ backgroundColor: 'var(--surface-card)' }}
             onMouseDown={dragMouseDown}
-            onClick={() => setExpanded(false)}
+            onClick={() => toggleExpanded(false)}
           >
             <div className="flex items-center gap-1.5 min-w-0">
               <div
@@ -691,7 +746,7 @@ export default function DriverCard({
             <button
               type="button"
               aria-label="Collapse card"
-              onClick={() => setExpanded(false)}
+              onClick={() => toggleExpanded(false)}
               className="p-2 -m-2 ml-2 rounded-md text-fg-muted hover:text-fg-strong hover:bg-black/5 dark:hover:bg-white/10 flex-shrink-0 transition-colors"
             >
               <ChevronUp size={20} />

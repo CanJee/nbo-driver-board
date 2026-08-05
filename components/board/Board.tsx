@@ -1,8 +1,8 @@
 'use client';
 
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
-import { Search } from 'lucide-react';
+import { ChevronDown, ChevronUp, Search } from 'lucide-react';
 import {
   DndContext,
   DragEndEvent,
@@ -40,8 +40,10 @@ import {
   DEFAULT_ZOOM,
   LaneGrows,
   LaneWidthsPref,
+  loadHeaderCollapsed,
   loadLaneWidths,
   loadZoom,
+  saveHeaderCollapsed,
   saveLaneWidths,
   saveZoom,
 } from '@/lib/board-prefs';
@@ -315,11 +317,28 @@ export default function Board({ initialDrivers, initialDispatchers, initialLanes
   const [isResizing, setIsResizing] = useState(false);
   const [rowsPerCol, setRowsPerCol] = useState(DEFAULT_ROWS_PER_COL);
   const [colBudget, setColBudget] = useState(DEFAULT_COL_BUDGET);
+  const [headerCollapsed, setHeaderCollapsed] = useState(false);
+  const [searchFocusToken, setSearchFocusToken] = useState(0);
+
+  // The header's transition classes are withheld until the first *user* toggle,
+  // so a device whose saved pref is "collapsed" arrives closed instead of
+  // playing the collapse at every page load. A ref rather than state: the flag
+  // has to be readable in the same render that flips headerCollapsed, since a
+  // transition only runs when the new value and the transition property land in
+  // the same style recalculation.
+  const headerAnimReadyRef = useRef(false);
+  const headerRowId = useId();
+  const hideHeaderBtnRef = useRef<HTMLButtonElement>(null);
+  const showHeaderBtnRef = useRef<HTMLButtonElement>(null);
+  // Set by the toggle buttons only, so the "/" shortcut can expand the header
+  // without this stealing focus from the search input it is opening it for.
+  const pendingHeaderFocusRef = useRef(false);
 
   // Saved prefs load after mount so the server render and the first client
   // render agree on the defaults (same mount guard ThemeToggle uses).
   useEffect(() => {
     setZoom(loadZoom());
+    setHeaderCollapsed(loadHeaderCollapsed());
   }, []);
 
   // Saved widths are only valid for the exact lane set on screen, so re-check
@@ -634,6 +653,51 @@ export default function Board({ initialDrivers, initialDispatchers, initialLanes
     saveZoom(next);
   };
 
+  // The single way headerCollapsed ever changes, so the saved pref and what is
+  // on screen can't drift apart (the "/" shortcut expands through here too).
+  const updateHeaderCollapsed = (next: boolean) => {
+    headerAnimReadyRef.current = true;
+    setHeaderCollapsed(next);
+    saveHeaderCollapsed(next);
+  };
+
+  // Hand focus to whichever toggle is now the visible one. Collapsing makes the
+  // button that was just clicked inert, which drops focus to <body> and leaves a
+  // keyboard user with nothing to tab from. This has to be an effect rather than
+  // the rAF it looks like it could be: a frame callback scheduled inside the
+  // click handler runs before React commits, while the incoming button is still
+  // inert and therefore still unfocusable.
+  useEffect(() => {
+    if (!pendingHeaderFocusRef.current) return;
+    pendingHeaderFocusRef.current = false;
+    const btn = headerCollapsed ? showHeaderBtnRef.current : hideHeaderBtnRef.current;
+    // preventScroll: the button sits in a clipped wrapper mid-animation, and
+    // scrolling it into view would leave the header content permanently offset.
+    btn?.focus({ preventScroll: true });
+  }, [headerCollapsed]);
+
+  // "/" while the header is hidden. SearchBox owns the shortcut normally, but
+  // its input is then clipped away and inert, where focus() is a guaranteed
+  // no-op — so the board takes the key over, opens the header and asks the box
+  // to focus itself once it is back. enableSlashShortcut is switched off in this
+  // state, so exactly one listener owns "/" at any moment.
+  useEffect(() => {
+    if (!headerCollapsed) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== '/' || e.defaultPrevented) return;
+      const t = e.target as HTMLElement | null;
+      const typing =
+        t instanceof HTMLElement &&
+        (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable);
+      if (typing) return;
+      e.preventDefault();
+      updateHeaderCollapsed(false);
+      setSearchFocusToken((n) => n + 1);
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [headerCollapsed]);
+
   // ── DRAG START ──
   const handleDragStart = (event: DragStartEvent) => {
     isDraggingRef.current = true;
@@ -925,6 +989,13 @@ export default function Board({ initialDrivers, initialDispatchers, initialLanes
   const getDispatcher = (laneId: string) =>
     dispatchers.find((d) => d.lane === laneId)?.dispatcher_name || '';
 
+  // Empty until the dispatcher toggles the header themselves, so restoring a
+  // saved "collapsed" on load is instant rather than an animation nobody asked
+  // for. motion-safe: leaves reduced-motion users with a plain snap.
+  const headerAnim = headerAnimReadyRef.current
+    ? 'motion-safe:transition-[grid-template-rows] motion-safe:duration-200 motion-safe:ease-out'
+    : '';
+
   return (
     <DndContext
       sensors={sensors}
@@ -947,22 +1018,43 @@ export default function Board({ initialDrivers, initialDispatchers, initialLanes
         style={{ backgroundColor: 'var(--surface-page)', '--board-zoom': zoom / 100 } as React.CSSProperties}
       >
 
-        {/* Header — compact single row on phones, full title from md up.
+        {/* Header — collapsible, because the logo makes it ~90px tall and on a
+            laptop or iPad that is a card and a half of lane the dispatcher
+            can't see. Both phases stay mounted and animate as opposite
+            grid-template-rows tracks (0fr/1fr), so the panel's height glides
+            and nothing inside is torn down: the search box keeps its "/"
+            listener, the clock keeps ticking, and the lane measurement below
+            re-runs off its own ResizeObserver.
+
+            `inert` on the hidden phase is what makes "mounted but clipped"
+            honest — without it a 0-height header still holds every one of its
+            buttons in the tab order.
+
+            Padding lives on the rows inside the clipped wrappers, never on
+            them: with border-box sizing padding sets a floor on height, so a
+            padded wrapper could never shrink to 0 and the collapsed header
+            would keep a dead band. */}
+        <div
+          className="rounded-lg flex-shrink-0 border overflow-hidden"
+          style={{ backgroundColor: 'var(--surface-panel)', borderColor: 'var(--brand)' }}
+        >
+        <div
+          id={headerRowId}
+          inert={headerCollapsed}
+          className={`grid ${headerAnim} ${headerCollapsed ? 'grid-rows-[0fr]' : 'grid-rows-[1fr]'}`}
+        >
+        <div className="min-h-0 overflow-hidden">
+        {/* Compact single row on phones, full title from md up.
             At xl+ both side sections become equal flex halves (flex-1 basis-0)
             so the title stays truly centred while the right cluster grows to
             fit the inline search input; below xl they keep natural widths
             because the phone/tablet header has no room to spare. */}
-        <div
-          className="flex items-center justify-between gap-2 px-3 lg:px-5 py-2 rounded-lg flex-shrink-0 border"
-          style={{ backgroundColor: 'var(--surface-panel)', borderColor: 'var(--brand)' }}
-        >
+        <div className="flex items-center justify-between gap-2 px-3 lg:px-5 py-2">
           <div className="flex items-center xl:flex-1 xl:basis-0">
             <NboLogo width={180} height={65} className="w-24 lg:w-[180px]" />
           </div>
           <h1 className="hidden md:block flex-shrink-0 text-base lg:text-xl font-bold text-fg-strong tracking-wide text-center whitespace-nowrap">
-            Transportation Dispatch{' '}
-            <span className="font-light text-fg-muted">—</span>{' '}
-            <span style={{ color: 'var(--brand)' }}>Live Status</span>
+            Transportation Dispatch
           </h1>
           <div className="flex items-center justify-end gap-1.5 lg:gap-3 xl:flex-1 xl:basis-0">
             {/* Search entry points by breakpoint: inline input at xl+; header
@@ -972,7 +1064,8 @@ export default function Board({ initialDrivers, initialDispatchers, initialLanes
               value={searchQuery}
               onChange={setSearchQuery}
               matchCount={searchActive ? searchMatches.size : null}
-              enableSlashShortcut
+              enableSlashShortcut={!headerCollapsed}
+              focusToken={searchFocusToken}
               className={`hidden xl:flex flex-1 min-w-[80px] transition-all ${
                 searchActive ? 'max-w-[240px]' : 'max-w-[150px] focus-within:max-w-[240px]'
               }`}
@@ -1021,7 +1114,50 @@ export default function Board({ initialDrivers, initialDispatchers, initialLanes
             </button>
             <SyncStatus downSince={realtimeDownSince} backup={!isPrimary} />
             <LiveClock className="text-lg lg:text-2xl" />
+            <button
+              type="button"
+              ref={hideHeaderBtnRef}
+              aria-label="Hide header"
+              aria-expanded={true}
+              aria-controls={headerRowId}
+              onClick={() => {
+                pendingHeaderFocusRef.current = true;
+                updateHeaderCollapsed(true);
+              }}
+              className="p-1.5 rounded text-fg-faint hover:text-fg-strong hover:bg-black/5 dark:hover:bg-white/10 transition-colors flex-shrink-0"
+            >
+              <ChevronUp size={16} />
+            </button>
           </div>
+        </div>
+        </div>
+        </div>
+
+        {/* The collapsed phase: a bare chevron, the whole width of the panel so
+            it is an easy target on a touchscreen. Deliberately holds nothing
+            else — the loud staleness warning is StaleBanner below, which shows
+            whether or not the header is open. */}
+        <div
+          inert={!headerCollapsed}
+          className={`grid ${headerAnim} ${headerCollapsed ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'}`}
+        >
+          <div className="min-h-0 overflow-hidden">
+            <button
+              type="button"
+              ref={showHeaderBtnRef}
+              aria-label="Show header"
+              aria-expanded={false}
+              aria-controls={headerRowId}
+              onClick={() => {
+                pendingHeaderFocusRef.current = true;
+                updateHeaderCollapsed(false);
+              }}
+              className="w-full flex items-center justify-center py-1 text-fg-faint hover:text-fg-strong hover:bg-black/5 dark:hover:bg-white/10 transition-colors"
+            >
+              <ChevronDown size={16} />
+            </button>
+          </div>
+        </div>
         </div>
 
         {/* The loud half of the staleness story — the header pill is easy to

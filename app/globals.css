@@ -348,3 +348,20 @@ body {
 .toast-exit {
   animation: fadeOut 0.3s ease-in forwards;
 }
+
+/* Driver card expand/collapse. The two views are separate subtrees that swap
+   instantly; DriverCard glides the height of the card around them with WAAPI
+   and this fades the arriving view in, so the pair reads as one card changing
+   shape rather than a cut. Keyframes outside the query, application inside:
+   someone who asked for less motion gets the swap with no fade, and the height
+   glide skips itself in the same case. Scoped to this one class on purpose —
+   a blanket motion rule here would reach dnd-kit's drag transforms. */
+@keyframes cardSwapIn {
+  from { opacity: 0; }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .card-swap-in {
+    animation: cardSwapIn 150ms ease-out;
+  }
+}

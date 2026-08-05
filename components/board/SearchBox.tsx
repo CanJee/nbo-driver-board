@@ -16,6 +16,9 @@ interface SearchBoxProps {
   enableSlashShortcut?: boolean;
   /** Called on Esc when the input is already empty (mobile row uses it to close). */
   onDismiss?: () => void;
+  /** Bump to request focus from outside — Board uses it after "/" re-expands a
+   *  collapsed header, where this box's own shortcut can't reach itself. */
+  focusToken?: number;
 }
 
 export default function SearchBox({
@@ -26,6 +29,7 @@ export default function SearchBox({
   autoFocus = false,
   enableSlashShortcut = false,
   onDismiss,
+  focusToken,
 }: SearchBoxProps) {
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -45,6 +49,17 @@ export default function SearchBox({
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
   }, [enableSlashShortcut]);
+
+  // preventScroll is load-bearing, not a nicety: when the token arrives the
+  // header is still animating open and this input sits inside a clipped
+  // overflow-hidden wrapper. A plain focus() scrolls that wrapper to reveal the
+  // input — hidden overflow is still programmatically scrollable — and the
+  // header content stays offset for good.
+  useEffect(() => {
+    if (!focusToken) return; // undefined, or the initial 0: never focus on mount
+    inputRef.current?.focus({ preventScroll: true });
+    inputRef.current?.select();
+  }, [focusToken]);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Escape') {
