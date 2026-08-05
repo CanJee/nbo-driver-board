@@ -884,11 +884,16 @@ export default function Board({ initialDrivers, initialDispatchers, initialLanes
   };
 
   // ── SET AWAY ──
+  // Returned (reason === null) has to put the driver back into whichever state
+  // they were in before the break, which is not always 'assigned': someone with
+  // no car who goes on a meal break was 'unassigned' going in, and writing
+  // 'assigned' back would leave the row claiming a car it does not have. Same
+  // rule as handleAssign below — the car number decides.
   const handleSetAway = async (driver: Driver, reason: AwayReason | null) => {
     await supabase
       .from('drivers')
       .update({
-        status: reason ? 'away' : 'assigned',
+        status: reason ? 'away' : driver.car_number ? 'assigned' : 'unassigned',
         away_reason: reason,
       })
       .eq('id', driver.id);

@@ -519,7 +519,16 @@ export default function DriverCard({
   // signature aren't key-checked).
   const dragMouseDown = listeners?.onMouseDown as React.MouseEventHandler | undefined;
 
-  const isUnassigned = driver.status === 'unassigned';
+  // car_number, not status, is the single source of truth for "has a car" — it
+  // is the column ASSIGN actually writes, and the only one that can't disagree
+  // with itself. status can: it packs availability and assignment into one
+  // field, so 'away' overwrites 'unassigned' and a driver who never had a car
+  // comes back from a break as 'assigned' (Board.tsx handleSetAway). Rows
+  // inserted outside the app land the same way, on the column's DEFAULT
+  // 'assigned'. Any of those used to silently drop the amber dashed frame, the
+  // "Car: --" label and the ASSIGN button; deriving from car_number heals the
+  // rows already in that state instead of only stopping new ones.
+  const isUnassigned = !driver.car_number;
   const isAway = driver.status === 'away';
 
   // Capitalised on purpose: JSX only treats a binding as a component when its
